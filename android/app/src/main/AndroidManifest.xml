@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+    <application
+        android:label="myTv+"
+        android:icon="@drawable/icon"
+        android:banner="@drawable/banner"
+        android:usesCleartextTraffic="true"
+        android:theme="@style/AppTheme"
+        android:hardwareAccelerated="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|keyboard|keyboardHidden|navigation">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- يسلّم ملف قائمة تشغيل M3U مؤقّت لتطبيق VLC/MX Player الخارجي (تبديل قنوات) -->
+        <provider
+            android:name=".PlaylistProvider"
+            android:authorities="com.smarttvplus.iptvmtc.playlist"
+            android:exported="true"
+            android:grantUriPermissions="true" />
+
+        <!-- خدمة اختيارية يفعّلها المستخدم يدوياً من إعدادات أندرويد (شاشة "الإتاحة") لتحويل
+             سهم فوق/تحت بالريموت إلى تبديل قناة تالية/سابقة أثناء التشغيل داخل VLC/MX -->
+        <service
+            android:name=".RemoteKeyAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+    </application>
+</manifest>

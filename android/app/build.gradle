@@ -1,0 +1,25 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace 'com.smarttvplus.iptvmtc'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.smarttvplus.iptvmtc'
+        minSdk 21          // أندرويد 5.0 فأعلى — يغطي أجهزة MTC والبوكسات القديمة
+        targetSdk 34
+        versionCode 1
+        versionName '1.0.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
