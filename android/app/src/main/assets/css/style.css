@@ -108,6 +108,7 @@ body.in-player, body.in-player .screen, body.in-player #html5-player {
   background: #141c2c; border-radius: 16px; padding: 30px; gap: 16px;
 }
 .preview-logo { max-width: 220px; max-height: 160px; object-fit: contain; }
+.preview-video { width: 100%; max-width: 420px; aspect-ratio: 16 / 9; background: #000; border-radius: 10px; object-fit: contain; }
 .preview-name { font-size: 32px; color: #fff; }
 .preview-cat { font-size: 24px; color: #9fb4d8; }
 .preview-archive { font-size: 24px; color: #2ecc71; }

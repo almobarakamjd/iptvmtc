@@ -19,6 +19,8 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.WebChromeClient;
+import android.webkit.ConsoleMessage;
+import android.util.Log;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -45,16 +47,26 @@ public class MainActivity extends Activity {
         s.setUseWideViewPort(true);
         s.setLoadWithOverviewMode(true);
 
+        WebView.setWebContentsDebuggingEnabled(true);
         web.setWebViewClient(new WebViewClient());
-        web.setWebChromeClient(new WebChromeClient());
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage cm) {
+                Log.d("WebConsole", cm.message() + " -- " + cm.sourceId() + ":" + cm.lineNumber());
+                return true;
+            }
+        });
         web.setBackgroundColor(0xFF000000);
         web.addJavascriptInterface(new AndroidBridge(), "AndroidExit");
         web.addJavascriptInterface(new OpenBridge(), "AndroidOpen");
         web.addJavascriptInterface(new StorageBridge(), "AndroidStorage");
         web.addJavascriptInterface(new SystemBridge(), "AndroidSystem");
 
+        startDiagnosticPingServer(); // تشخيص مؤقت: نتأكد هل المشكلة خاصة بخدمة الإتاحة أم عامة بالشبكة/التلفاز
+
         setContentView(web);
         hideSystemUi();
+        web.requestFocus();
         web.loadUrl("file:///android_asset/index.html");
     }
 
@@ -75,6 +87,31 @@ public class MainActivity extends Activity {
                         | View.SYSTEM_UI_FLAG_FULLSCREEN
                         | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                         | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+    }
+
+    /* تشخيص مؤقت (يُحذف لاحقاً): خادم HTTP مصغّر جداً على منفذ 8643 يعمل من نشاط التطبيق نفسه
+       (بخلاف RemoteControlServer الذي يعمل من خدمة الإتاحة على منفذ 8642) — إن نجح الوصول لهذا
+       بينما فشل الآخر، فالمشكلة خاصة بسياق خدمة الإتاحة تحديداً. إن فشل هو أيضاً، فالمشكلة عامة
+       (جدار حماية بالراوتر أو بنظام التلفاز نفسه) وليست بكود RemoteControlServer. */
+    private void startDiagnosticPingServer() {
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    java.net.ServerSocket ss = new java.net.ServerSocket(8643);
+                    while (true) {
+                        java.net.Socket sock = ss.accept();
+                        String body = "pong-from-activity";
+                        byte[] b = body.getBytes("UTF-8");
+                        java.io.OutputStream out = sock.getOutputStream();
+                        out.write(("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: "
+                                + b.length + "\r\nConnection: close\r\n\r\n").getBytes("UTF-8"));
+                        out.write(b);
+                        out.flush();
+                        sock.close();
+                    }
+                } catch (Exception e) { /* تجاهل — هذا كود تشخيص مؤقت فقط */ }
+            }
+        }).start();
     }
 
     /** جسر بسيط يسمح لصفحة الويب بإغلاق التطبيق فعلياً (بعد تأكيد المستخدم) */

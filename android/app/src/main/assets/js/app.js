@@ -6,6 +6,7 @@
   var current = null;          // الاشتراك المفتوح حالياً
   var screenStack = [];        // لتتبع زر الرجوع
   var focus = { list: [], idx: 0, onEnter: null, cols: 1, onMove: null };
+  var enterHold = { down: false, longFired: false, timer: null };
   var session = { adultShown: {} };   // إظهار المحتوى المحجوب — لجلسة التشغيل فقط
   var searchCache = {};               // كاش القوائم الكاملة للبحث: key = profileId:kind
 
@@ -288,6 +289,7 @@
   };
 
   function openBrowse(kind, title) {
+    stopPreviewVideo();
     screenStack.push(homeScreen);
     browse = {
       kind: kind, zone: 'cats', catEls: [], itemEls: [], items: [], rawItems: [], catIdx: 0,
@@ -360,6 +362,7 @@
 
   /* شريط بحث سريع داخل القسم/التصنيف الحالي فقط (يفلتر ما هو محمَّل بلا نداء جديد للسيرفر) */
   function focusItemSearch() {
+    stopPreviewVideo();
     clearAllBrowseFocus();
     browse.zone = 'itemsearch';
     $('search-items-box').classList.add('focused');
@@ -471,6 +474,7 @@
   }
 
   function focusCats() {
+    stopPreviewVideo();
     clearAllBrowseFocus();
     browse.zone = 'cats';
     setFocusList(browse.catEls, function (idx) {
@@ -551,7 +555,46 @@
   function nameKeyOf(kind) { return 'name'; }
 
   /* لوحة معاينة القناة (للقنوات المباشرة فقط): تتحدث مع كل تحريك للتركيز */
+  /* معاينة فيديو حقيقية مباشرة أثناء تصفح القنوات (طلب صريح 2026-08-27، بعد تحذير من
+     مخاطرة تجمّد سابقة مع ExoPlayer المُضمَّن على أجهزة ضعيفة — هذا مختلف تماماً: تشغيل
+     داخل WebView نفسه عبر hls.js (موجود أصلاً بالمشروع)، بلا أي محرك أندرويد أصلي مُضمَّن،
+     مع تأخير قبل البدء (حتى لا يُحمَّل بث لكل قناة يمر عليها التركيز أثناء التنقل السريع)
+     وإيقاف/تحرير فوري وصريح عند أي تغيير تركيز أو مغادرة الشاشة. */
+  var previewHls = null;
+  var previewTimer = null;
+
+  function stopPreviewVideo() {
+    clearTimeout(previewTimer);
+    previewTimer = null;
+    var v = $('preview-video');
+    try { if (previewHls) { previewHls.destroy(); } } catch (e) {}
+    previewHls = null;
+    try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) {}
+    v.classList.add('hidden');
+    $('preview-logo').classList.remove('hidden');
+  }
+
+  function startPreviewVideo(idx, it) {
+    var v = $('preview-video');
+    try {
+      var url = Xtream.streamUrl(current, 'live', it.stream_id, null);
+      if (window.Hls && Hls.isSupported()) {
+        previewHls = new Hls({ maxBufferLength: 8, maxMaxBufferLength: 12, liveSyncDurationCount: 2 });
+        previewHls.on(Hls.Events.ERROR, function (ev, data) { if (data && data.fatal) stopPreviewVideo(); });
+        previewHls.loadSource(url);
+        previewHls.attachMedia(v);
+      } else {
+        v.src = url;
+      }
+      v.muted = true;
+      v.play().catch(function () {});
+      v.classList.remove('hidden');
+      $('preview-logo').classList.add('hidden');
+    } catch (e) { stopPreviewVideo(); }
+  }
+
   function updatePreview(idx) {
+    stopPreviewVideo();
     if (browse.kind !== 'live') return;
     var it = browse.items[idx];
     if (!it) return;
@@ -561,6 +604,9 @@
     $('preview-name').textContent = it.name || '';
     $('preview-cat').textContent = browse.catMap[it.category_id] || '';
     $('preview-archive').textContent = it.tv_archive ? '● تدعم إعادة البث' : '';
+    previewTimer = setTimeout(function () {
+      if (browse.kind === 'live' && browse.zone === 'items' && browse.items[idx] === it) startPreviewVideo(idx, it);
+    }, 600);
   }
 
   /* أقصى عدد بطاقات تُرسم دفعة واحدة — قوائم بعض الاشتراكات تتجاوز 170 ألف مادة، ورسمها
@@ -810,6 +856,7 @@
     }
     var it = browse.items[idx];
     if (browse.mode === 'customPick') { redButton(); return; }
+    stopPreviewVideo();
     if (browse.kind === 'live') {
       // القناة المباشرة تُشغَّل فوراً عند الاختيار — فتسجيلها بالمشاهدات الأخيرة هنا صحيح
       Storage.addRecent(current.id, browse.kind, it);
@@ -864,7 +911,7 @@
           if (cols > 1) { if (focus.idx % cols === 0) focusCats(); else moveFocus(-1); }
           else focusCats();
           return;
-        case 13: ev.preventDefault(); if (focus.onEnter) focus.onEnter(focus.idx); return;
+        case 13: ev.preventDefault(); startEnterHold(); return;
         case 10009: case 27: ev.preventDefault(); back(); return;
         case 403: case 70: redButton(); return;
       }
@@ -930,6 +977,34 @@
       }
     }
   }
+
+  /* ضغطة طويلة على "موافق" (نحو 550ms) داخل قائمة القنوات/الأفلام كبديل موثوق لزر الريموت
+     الأحمر — ريموتات كثيرة (بما فيها ريموت TCL الفعلي) ليس فيها زر أحمر حقيقي أصلاً، بل زر
+     "123" يفتح قائمة اختيار للأزرار الملوّنة، والنظام أحياناً يعترض الضغطة قبل وصولها للتطبيق
+     أصلاً ("هذا الزر لا يعمل في هذه الصفحة"). الضغطة الطويلة تصل دائماً لأنها نفس زر موافق
+     العادي المُستخدَم أصلاً للتنقل، فتعمل على أي ريموت بلا استثناء. */
+  function startEnterHold() {
+    if (enterHold.down) return; // تجاهل تكرار keydown التلقائي أثناء الاستمرار بالضغط
+    enterHold.down = true;
+    enterHold.longFired = false;
+    enterHold.timer = setTimeout(function () {
+      enterHold.longFired = true;
+      redButton();
+    }, 550);
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) stopPreviewVideo(); // التطبيق بالخلفية (مثلاً فتح مشغّل خارجي) — لا داعي لمعاينة تعمل بلا فائدة
+  });
+
+  document.addEventListener('keyup', function (ev) {
+    if (ev.keyCode !== 13 || !enterHold.down) return;
+    clearTimeout(enterHold.timer);
+    var wasLong = enterHold.longFired;
+    enterHold.down = false;
+    enterHold.longFired = false;
+    if (!wasLong && browse.zone === 'items' && focus.onEnter) focus.onEnter(focus.idx);
+  });
 
   /* ---------- المسلسلات ----------
      مسلسل بأكثر من موسم: تُعرض قائمة المواسم أولاً (بدل تسطيح كل حلقات كل المواسم بقائمة واحدة
@@ -1742,6 +1817,7 @@
 
   /* ---------- زر الرجوع ---------- */
   function back() {
+    stopPreviewVideo();
     if (kb.open) { closeKeyboard(null); return; }
     if (confirmDialog.open) { closeConfirm(); return; }
     if (player.menuOpen) { closePlayerMenu(); return; }
