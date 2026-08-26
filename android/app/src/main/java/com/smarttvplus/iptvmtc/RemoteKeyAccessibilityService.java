@@ -9,12 +9,16 @@ import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
 
 /** خدمة إتاحة (Accessibility Service) اختيارية — المستخدم يفعّلها يدوياً من إعدادات أندرويد.
-    غرضها الوحيد: بينما مشغّل خارجي (VLC/MX) هو صاحب التركيز على الشاشة أثناء عرض قناة مباشرة،
-    نعترض ضغطتي سهم فوق/تحت بالريموت (اللي عادة ما يفهمهما ذلك المشغّل كتبديل قناة) ونحوّلهما
-    لمفتاح وسائط قياسي (التالي/السابق) يرسله أندرويد تلقائياً لجلسة الوسائط (MediaSession) النشطة
-    حالياً — وهي جلسة VLC/MX نفسه بما إنه هو من يشغّل الصوت فعلياً، فينتقل للقناة التالية/السابقة
-    بقائمة التشغيل التي سبق وسلّمناها له (انظر playPlaylist بـMainActivity وplayer.channelList
-    بـapp.js). لا نتدخل بأي زر آخر ولا بأي تطبيق غير المشغّلات المعروفة أدناه. */
+    غرضان لها:
+    1) بينما مشغّل خارجي (VLC/MX) هو صاحب التركيز على الشاشة أثناء عرض قناة مباشرة، نعترض ضغطتي
+       سهم فوق/تحت بالريموت (اللي عادة ما يفهمهما ذلك المشغّل كتبديل قناة) ونحوّلهما لمفتاح وسائط
+       قياسي (التالي/السابق) يرسله أندرويد تلقائياً لجلسة الوسائط (MediaSession) النشطة حالياً —
+       وهي جلسة VLC/MX نفسه بما إنه هو من يشغّل الصوت فعلياً، فينتقل للقناة التالية/السابقة بقائمة
+       التشغيل التي سبق وسلّمناها له (انظر playPlaylist بـMainActivity وplayer.channelList بـapp.js).
+       لا نتدخل بأي زر آخر ولا بأي تطبيق غير المشغّلات المعروفة أدناه.
+    2) تشغّل خادم HTTP محلي مصغّر (RemoteControlServer) يسمح بالتحكم بالتلفاز عن بُعد من جهاز آخر
+       بنفس شبكة الواي فاي (رئيسية/رجوع/وسائط/فتح تطبيق) — بديل لـADB لا يحتاج كابل ولا خيارات
+       مطوّر، فقط تفعيل هذه الخدمة نفسها. */
 public class RemoteKeyAccessibilityService extends AccessibilityService {
 
     private static final String[] PLAYER_PACKAGES = {
@@ -24,6 +28,7 @@ public class RemoteKeyAccessibilityService extends AccessibilityService {
     };
 
     private String foregroundPackage = "";
+    private RemoteControlServer remoteControlServer;
 
     @Override
     protected void onServiceConnected() {
@@ -33,6 +38,19 @@ public class RemoteKeyAccessibilityService extends AccessibilityService {
             info.flags |= AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
             setServiceInfo(info);
         }
+
+        remoteControlServer = new RemoteControlServer(this);
+        remoteControlServer.start();
+    }
+
+    @Override
+    public void onDestroy() {
+        if (remoteControlServer != null) remoteControlServer.stop();
+        super.onDestroy();
+    }
+
+    String getForegroundPackage() {
+        return foregroundPackage;
     }
 
     @Override
