@@ -866,7 +866,7 @@
     }
     // الأفلام/المسلسلات: فتح شاشة المعلومات فقط لا يُحسب مشاهدة — التسجيل بالمشاهدات
     // الأخيرة يحدث عند الضغط الفعلي على "تشغيل" (openInfo) أو اختيار حلقة (openSeriesEpisodes)
-    else openInfo(browse.kind, it);
+    else openInfo(browse.kind, it, idx);
   }
 
   function focusItems() {
@@ -1087,14 +1087,28 @@
       var label = (series.name + ' — م' + ep.season + ' ح' + ep.episode_num).replace(/[\r\n]/g, ' ');
       return '#EXTINF:-1,' + label + '\n' + Xtream.streamUrl(current, 'series', ep.id, ep.container_extension);
     }).join('\n') + '\n';
-    AndroidOpen.playPlaylist(m3u, Storage.getPreferredPlayer());
+    AndroidOpen.playPlaylist(m3u, Storage.getPreferredPlayer('series'));
     return true;
   }
 
   /* ---------- شاشة معلومات الفيلم/المسلسل: تفاصيل + تفضيل قبل التشغيل ---------- */
+  /* يحوّل مدة الفيلم من ثوانٍ (duration_secs) أو نص "HH:MM:SS" (duration) — Xtream يرسل
+     أحياناً هذا فقط وأحياناً ذاك حسب مزوّد الاشتراك — إلى صيغة عربية مختصرة "ساعة ودقائق" */
+  function formatDuration(secs, text) {
+    var total = parseInt(secs, 10);
+    if (!total && text && /^\d{1,2}:\d{2}:\d{2}$/.test(text)) {
+      var p = text.split(':').map(Number);
+      total = p[0] * 3600 + p[1] * 60 + p[2];
+    }
+    if (!total) return '';
+    var h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60);
+    return (h ? h + 'س ' : '') + (m || !h ? m + 'د' : '');
+  }
+
   function infoMetaLine(fields) {
     var bits = [];
     if (fields.year) bits.push(fields.year);
+    if (fields.duration) bits.push(fields.duration);
     var r = parseFloat(fields.rating || 0);
     if (r > 0) bits.push('⭐'.repeat(Math.max(1, Math.round(r / (r > 5 ? 2 : 1)))));
     if (fields.genre) bits.push(fields.genre);
@@ -1121,8 +1135,16 @@
     }).catch(function () { loader(false); toast('تعذّرت الترجمة — تحقق من الإنترنت'); });
   }
 
-  function openInfo(kind, item) {
-    screenStack.push(function () { show('screen-browse'); renderItems(browse.items, true); });
+  function openInfo(kind, item, returnIdx) {
+    screenStack.push(function () {
+      show('screen-browse');
+      renderItems(browse.items, true);
+      // نعيد التركيز لنفس البطاقة التي كانت مفتوحة قبل الدخول لشاشة المعلومات، بدل العودة لأول بطاقة دائماً
+      if (returnIdx != null && focus.list.length) {
+        focus.idx = Math.min(returnIdx, focus.list.length - 1);
+        paintFocus();
+      }
+    });
     show('screen-info');
     $('info-title').textContent = item.name || '';
     $('info-meta').textContent = '';
@@ -1139,6 +1161,13 @@
           Storage.toggleFav(current.id, kind, item);
           renderActions(info);
         }]);
+      if (Storage.isInRecent(current.id, kind, item)) {
+        opts.push(['🗑 حذف من المشاهدات الأخيرة', function () {
+          Storage.removeRecent(current.id, kind, item);
+          toast('حُذف من المشاهدات الأخيرة');
+          renderActions(info);
+        }]);
+      }
       if (kind === 'vod') {
         opts.push(['▶ تشغيل الفيلم', function () {
           Storage.addRecent(current.id, 'vod', item);
@@ -1176,6 +1205,7 @@
       var d = (info && info.info) || {};
       $('info-meta').textContent = infoMetaLine({
         year: d.year || d.releaseDate || d.release_date || '',
+        duration: formatDuration(d.duration_secs, d.duration),
         rating: d.rating_5based || d.rating || 0,
         genre: d.genre || '',
         director: d.director || '',
@@ -1191,9 +1221,9 @@
      التشغيل الفعلي على أندرويد يتم خارجياً بمشغل مثبَّت أصلاً على الجهاز (VLC/MX Player عادة
      موجودان على أي تلفزيون/بوكس) بدل تضمين محرك فيديو داخل التطبيق — أبسط وأثبت من أي محرك
      مُضمَّن على أجهزة برام محدودة. على تلفزيونات Tizen (لا يوجد AndroidOpen) يبقى المشغّل الداخلي. */
-  function playExternally(url) {
+  function playExternally(url, kind, title) {
     if (typeof AndroidOpen !== 'undefined' && AndroidOpen.playVideo) {
-      AndroidOpen.playVideo(url, Storage.getPreferredPlayer());
+      AndroidOpen.playVideo(url, Storage.getPreferredPlayer(kind), title || '');
       return true;
     }
     return false;
@@ -1209,7 +1239,7 @@
       return '#EXTINF:-1,' + (it.name || 'قناة').replace(/[\r\n]/g, ' ') + '\n' +
         Xtream.streamUrl(current, 'live', it.stream_id, null);
     }).join('\n') + '\n';
-    AndroidOpen.playPlaylist(m3u, Storage.getPreferredPlayer());
+    AndroidOpen.playPlaylist(m3u, Storage.getPreferredPlayer('live'));
     return true;
   }
 
@@ -1219,7 +1249,7 @@
     var url = Xtream.streamUrl(current, kind, id, ext);
     if (kind === 'live' && player.channelList && player.channelList.length > 1
         && playExternalPlaylist(player.channelList, player.channelIndex)) return;
-    if (playExternally(url)) return;
+    if (playExternally(url, kind, name)) return;
     var ret = screenStack[screenStack.length - 1];
     screenStack.push(function () { stopPlayback(); if (ret) ret(); });
     // بيانات الإعادة للقنوات المباشرة
@@ -1521,9 +1551,11 @@
     box.appendChild(restoreEl); els.push(restoreEl);
     actions.push(cloudRestore);
 
-    var playerEl = makeItem('▶ المشغّل المفضل: <span class="sub">' + PLAYER_CHOICE_NAMES[Storage.getPreferredPlayer()] + '</span>');
-    box.appendChild(playerEl); els.push(playerEl);
-    actions.push(cyclePreferredPlayer);
+    PLAYER_KIND_ORDER.forEach(function (k) {
+      var el = makeItem(PLAYER_KIND_LABELS[k] + ': <span class="sub">' + PLAYER_CHOICE_NAMES[Storage.getPreferredPlayer(k)] + '</span>');
+      box.appendChild(el); els.push(el);
+      actions.push(function () { cyclePreferredPlayer(k); });
+    });
 
     var pageSizeEl = makeItem('🔢 عدد البطاقات بالدفعة: <span class="sub">' + Storage.getPageSize() + '</span>');
     box.appendChild(pageSizeEl); els.push(pageSizeEl);
@@ -1547,19 +1579,25 @@
     AndroidSystem.openAccessibilitySettings();
   }
 
-  /* ---------- المشغّل المفضل لفتح البث خارجياً ---------- */
+  /* ---------- المشغّل المفضل لفتح البث خارجياً — منفصل لكل نوع محتوى ---------- */
   var PLAYER_CHOICES = ['', 'org.videolan.vlc', 'com.mxtech.videoplayer.ad'];
   var PLAYER_CHOICE_NAMES = {
     '': 'اسأل دائماً',
     'org.videolan.vlc': 'VLC',
     'com.mxtech.videoplayer.ad': 'MX Player'
   };
-  function cyclePreferredPlayer() {
-    var cur = Storage.getPreferredPlayer();
+  var PLAYER_KIND_ORDER = ['live', 'movie', 'series'];
+  var PLAYER_KIND_LABELS = {
+    live: '📡 مشغّل القنوات',
+    movie: '🎬 مشغّل الأفلام',
+    series: '📺 مشغّل المسلسلات'
+  };
+  function cyclePreferredPlayer(kind) {
+    var cur = Storage.getPreferredPlayer(kind);
     var idx = PLAYER_CHOICES.indexOf(cur);
     var next = PLAYER_CHOICES[(idx + 1) % PLAYER_CHOICES.length];
-    Storage.setPreferredPlayer(next);
-    toast('المشغّل المفضل: ' + PLAYER_CHOICE_NAMES[next]);
+    Storage.setPreferredPlayer(kind, next);
+    toast(PLAYER_KIND_LABELS[kind] + ': ' + PLAYER_CHOICE_NAMES[next]);
     openSettings();
   }
 

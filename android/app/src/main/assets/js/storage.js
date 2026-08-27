@@ -125,15 +125,37 @@ var Storage = (function () {
     localStorage.setItem(RECENT_KEY, JSON.stringify(all));
   }
 
+  function isInRecent(profileId, kind, it) {
+    var k = favKeyOf(kind, it);
+    return recentList(profileId, kind).some(function (x) { return favKeyOf(kind, x) === k; });
+  }
+
   /* آخر اشتراك مفتوح — لفتح التطبيق عليه مباشرة في المرة القادمة دون اختيار في كل مرة */
   var LAST_KEY = 'aftv_last_profile';
   function getLastProfile() { try { return localStorage.getItem(LAST_KEY); } catch (e) { return null; } }
   function setLastProfile(id) { try { localStorage.setItem(LAST_KEY, id); } catch (e) {} }
 
-  /* المشغّل المفضل لفتح البث (VLC أو MX Player) — فارغ يعني "اسأل دائماً" (نافذة اختيار أندرويد) */
-  var PLAYER_PREF_KEY = 'aftv_preferred_player_v1';
-  function getPreferredPlayer() { try { return localStorage.getItem(PLAYER_PREF_KEY) || ''; } catch (e) { return ''; } }
-  function setPreferredPlayer(pkg) { try { localStorage.setItem(PLAYER_PREF_KEY, pkg || ''); } catch (e) {} }
+  /* المشغّل المفضل لفتح البث (VLC أو MX Player) — منفصل لكل نوع محتوى (قنوات مباشرة/أفلام/
+     مسلسلات) لأن بعض المستخدمين يفضّلون مشغّلاً مختلفاً حسب النوع. فارغ يعني "اسأل دائماً"
+     (نافذة اختيار أندرويد). عند أول استخدام بعد هذا التحديث، كل نوع يرث القيمة الموحّدة
+     القديمة (إن وُجدت) كافتراضي — ترحيل بلا حاجة لتدخّل المستخدم. */
+  var PLAYER_PREF_KEYS = {
+    live: 'aftv_preferred_player_live_v1',
+    movie: 'aftv_preferred_player_movie_v1',
+    series: 'aftv_preferred_player_series_v1'
+  };
+  var PLAYER_PREF_LEGACY_KEY = 'aftv_preferred_player_v1';
+  function getPreferredPlayer(kind) {
+    try {
+      var key = PLAYER_PREF_KEYS[kind] || PLAYER_PREF_KEYS.live;
+      var v = localStorage.getItem(key);
+      if (v !== null) return v;
+      return localStorage.getItem(PLAYER_PREF_LEGACY_KEY) || '';
+    } catch (e) { return ''; }
+  }
+  function setPreferredPlayer(kind, pkg) {
+    try { localStorage.setItem(PLAYER_PREF_KEYS[kind] || PLAYER_PREF_KEYS.live, pkg || ''); } catch (e) {}
+  }
 
   /* عدد البطاقات المرسومة دفعة واحدة بالقوائم الضخمة (انظر PAGE_SIZE بـapp.js) */
   var PAGE_SIZE_KEY = 'aftv_page_size_v1';
@@ -223,6 +245,7 @@ var Storage = (function () {
     recentList: recentList,
     addRecent: addRecent,
     removeRecent: removeRecent,
+    isInRecent: isInRecent,
     getPreferredPlayer: getPreferredPlayer,
     setPreferredPlayer: setPreferredPlayer,
     getPageSize: getPageSize,

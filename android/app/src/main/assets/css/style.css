@@ -37,6 +37,9 @@ body.in-player, body.in-player .screen, body.in-player #html5-player {
   font-size: 34px; padding: 18px 34px;
   background: #1a2334; border-radius: 14px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex-shrink: 0; /* بدونها flexbox يضغط ارتفاع كل عنصر ليدخل الكل ضمن max-height، فيُقتَص سطر
+                     .sub الثاني (القيمة تحت العنوان) رغم وجوده فعلياً بالـDOM — التنقّل بالتركيز
+                     يمرّر الحاوية تلقائياً (scrollIntoView) فلا حاجة لضغط الارتفاعات */
 }
 .v-list.big .item { font-size: 46px; padding: 28px 44px; }
 .item.focused { background: #2e6fd8; color: #fff; transform: scale(1.02); }
