@@ -285,7 +285,7 @@
   var GRID_COLS = 4;
   var browse = {
     kind: null, zone: 'cats', catEls: [], itemEls: [], items: [], rawItems: [], catIdx: 0,
-    catMap: {}, rawCats: [], mode: 'normal', itemsLayoutCols: 1, searchIdx: 0, catFilterText: '', itemFilterText: '', removeMode: false, selectedKeys: {}
+    catMap: {}, rawCats: [], mode: 'normal', itemsLayoutCols: 1, searchIdx: 0, itemBarIdx: 0, catFilterText: '', itemFilterText: '', removeMode: false, selectedKeys: {}
   };
 
   function openBrowse(kind, title) {
@@ -293,7 +293,7 @@
     screenStack.push(homeScreen);
     browse = {
       kind: kind, zone: 'cats', catEls: [], itemEls: [], items: [], rawItems: [], catIdx: 0,
-      catMap: {}, catCounts: {}, rawCats: [], mode: 'normal', itemsLayoutCols: 1, searchIdx: 0, catFilterText: '', itemFilterText: '', removeMode: false, selectedKeys: {}
+      catMap: {}, catCounts: {}, rawCats: [], mode: 'normal', itemsLayoutCols: 1, searchIdx: 0, itemBarIdx: 0, catFilterText: '', itemFilterText: '', removeMode: false, selectedKeys: {}
     };
     show('screen-browse');
     $('browse-title').textContent = title + ' — ' + current.name;
@@ -359,11 +359,17 @@
      البطاقة فقط (بلا حذف فوري)، ثم يتحوّل نفس الزر لـ"تأكيد حذف (N)" بمجرد تحديد عنصر واحد
      فأكثر — ضغطه عندئذٍ ينفّذ الحذف الفعلي لكل المحدَّد دفعة واحدة. */
   function updateRemoveModeBoxLabel() {
-    var box = $('remove-mode-box');
-    box.classList.toggle('on', browse.removeMode);
-    if (!browse.removeMode) { box.textContent = '🗑 تحديد للحذف'; return; }
-    var n = Object.keys(browse.selectedKeys || {}).length;
-    box.textContent = n > 0 ? ('✅ تأكيد حذف (' + n + ')') : '🗑 إلغاء التحديد';
+    var label;
+    if (!browse.removeMode) { label = '🗑 تحديد للحذف'; }
+    else {
+      var n = Object.keys(browse.selectedKeys || {}).length;
+      label = n > 0 ? ('✅ تأكيد حذف (' + n + ')') : '🗑 إلغاء التحديد';
+    }
+    ['remove-mode-box', 'delete-tile-box'].forEach(function (id) {
+      var box = $(id);
+      box.classList.toggle('on', browse.removeMode);
+      box.textContent = label;
+    });
   }
 
   function toggleSelectAt(idx) {
@@ -424,6 +430,7 @@
     browse.catEls.forEach(function (e) { e.classList.remove('focused'); });
     browse.itemEls.forEach(function (e) { e.classList.remove('focused'); });
     $('search-items-box').classList.remove('focused');
+    $('delete-tile-box').classList.remove('focused');
   }
   function clearAllBrowseFocus() { clearSearchFocus(); clearColFocus(); }
 
@@ -433,12 +440,22 @@
     paintSearchFocus();
   }
 
-  /* شريط بحث سريع داخل القسم/التصنيف الحالي فقط (يفلتر ما هو محمَّل بلا نداء جديد للسيرفر) */
+  /* شريط بحث سريع داخل القسم/التصنيف الحالي فقط (يفلتر ما هو محمَّل بلا نداء جديد للسيرفر)،
+     وبجانبه — بالأقسام القابلة للحذف فقط — زر "تحديد للحذف" مكرَّر هنا أيضاً (بالإضافة لأعلى
+     الشاشة) ليكون ظاهراً مباشرة فوق البطاقات ويسهل إيجاده بلا تنقّل بعيد */
+  function paintItemBarFocus() {
+    $('search-items-box').classList.toggle('focused', browse.itemBarIdx === 0);
+    $('delete-tile-box').classList.toggle('focused', browse.itemBarIdx === 1);
+  }
+  function itemBarMaxIdx() {
+    return $('delete-tile-box').classList.contains('hidden') ? 0 : 1;
+  }
   function focusItemSearch() {
     stopPreviewVideo();
     clearAllBrowseFocus();
     browse.zone = 'itemsearch';
-    $('search-items-box').classList.add('focused');
+    browse.itemBarIdx = Math.min(browse.itemBarIdx, itemBarMaxIdx());
+    paintItemBarFocus();
   }
 
   function startItemSearch() {
@@ -547,9 +564,12 @@
     browse.removeMode = false;
     browse.selectedKeys = {};
     // زر "تحديد للحذف" مفيد فقط بأقسام تحتوي عناصر يمكن حذفها (مفضلة/مشاهدات أخيرة/قائمة مخصّصة)
+    // — يظهر مكرَّراً بمكانين: أعلى الشاشة، وأيضاً مباشرة فوق البطاقات نفسها (أسهل اكتشافاً)
     var supportsDelete = browse.mode === 'fav' || browse.mode === 'recent' || browse.mode === 'customView';
     $('remove-mode-box').classList.toggle('hidden', !supportsDelete);
+    $('delete-tile-box').classList.toggle('hidden', !supportsDelete);
     browse.searchIdx = Math.min(browse.searchIdx, searchMaxIdx());
+    browse.itemBarIdx = 0;
     updateRemoveModeBoxLabel();
   }
 
@@ -1013,7 +1033,11 @@
       switch (k) {
         case 40: ev.preventDefault(); focusItems(); return;
         case 38: ev.preventDefault(); return;
-        case 13: ev.preventDefault(); startItemSearch(); return;
+        case 37: ev.preventDefault(); browse.itemBarIdx = Math.min(itemBarMaxIdx(), browse.itemBarIdx + 1); paintItemBarFocus(); return;
+        case 39: ev.preventDefault(); browse.itemBarIdx = Math.max(0, browse.itemBarIdx - 1); paintItemBarFocus(); return;
+        case 13: ev.preventDefault();
+          if (browse.itemBarIdx === 0) startItemSearch(); else toggleRemoveMode();
+          return;
         case 10009: case 27: ev.preventDefault(); back(); return;
       }
       return;
