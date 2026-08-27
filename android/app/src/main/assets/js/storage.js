@@ -242,6 +242,7 @@ var Storage = (function () {
     favList: favList,
     isFav: isFav,
     toggleFav: toggleFav,
+    keyOf: favKeyOf,
     recentList: recentList,
     addRecent: addRecent,
     removeRecent: removeRecent,

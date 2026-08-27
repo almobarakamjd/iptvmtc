@@ -285,7 +285,7 @@
   var GRID_COLS = 4;
   var browse = {
     kind: null, zone: 'cats', catEls: [], itemEls: [], items: [], rawItems: [], catIdx: 0,
-    catMap: {}, rawCats: [], mode: 'normal', itemsLayoutCols: 1, searchIdx: 0, catFilterText: '', itemFilterText: '', removeMode: false
+    catMap: {}, rawCats: [], mode: 'normal', itemsLayoutCols: 1, searchIdx: 0, catFilterText: '', itemFilterText: '', removeMode: false, selectedKeys: {}
   };
 
   function openBrowse(kind, title) {
@@ -293,7 +293,7 @@
     screenStack.push(homeScreen);
     browse = {
       kind: kind, zone: 'cats', catEls: [], itemEls: [], items: [], rawItems: [], catIdx: 0,
-      catMap: {}, catCounts: {}, rawCats: [], mode: 'normal', itemsLayoutCols: 1, searchIdx: 0, catFilterText: '', itemFilterText: '', removeMode: false
+      catMap: {}, catCounts: {}, rawCats: [], mode: 'normal', itemsLayoutCols: 1, searchIdx: 0, catFilterText: '', itemFilterText: '', removeMode: false, selectedKeys: {}
     };
     show('screen-browse');
     $('browse-title').textContent = title + ' — ' + current.name;
@@ -349,18 +349,76 @@
     $('search-cats-box').classList.toggle('focused', browse.searchIdx === 1);
     $('remove-mode-box').classList.toggle('focused', browse.searchIdx === 2);
   }
+  /* آخر فهرس صالح لشريط البحث العلوي — 2 (زر التحديد للحذف) فقط إن كان ظاهراً بالقسم الحالي */
+  function searchMaxIdx() {
+    return $('remove-mode-box').classList.contains('hidden') ? 1 : 2;
+  }
 
-  /* "وضع الإزالة": بديل موثوق للضغطة الطويلة على "موافق" (لا تصل بثبات لكل الريموتات الفعلية) —
-     بعد تفعيله، ضغطة "موافق" العادية على أي بطاقة تنفّذ نفس فعل الزر الأحمر (redButton) مباشرة
-     بدل فتح شاشة المعلومات أو تشغيل القناة. يبقى مفعّلاً حتى يُطفئه المستخدم يدوياً أو يغادر القسم. */
-  function toggleRemoveMode() {
-    browse.removeMode = !browse.removeMode;
+  /* "تحديد للحذف": بديل موثوق للضغطة الطويلة على "موافق" (لا تصل بثبات لكل الريموتات الفعلية) —
+     بعد تفعيله تظهر مربعات اختيار (⬜/✅) على كل بطاقة، ضغطة "موافق" العادية تُحدِّد/تُلغي تحديد
+     البطاقة فقط (بلا حذف فوري)، ثم يتحوّل نفس الزر لـ"تأكيد حذف (N)" بمجرد تحديد عنصر واحد
+     فأكثر — ضغطه عندئذٍ ينفّذ الحذف الفعلي لكل المحدَّد دفعة واحدة. */
+  function updateRemoveModeBoxLabel() {
     var box = $('remove-mode-box');
-    box.textContent = '🗑 وضع الإزالة: ' + (browse.removeMode ? 'تشغيل ✓' : 'إيقاف');
     box.classList.toggle('on', browse.removeMode);
-    toast(browse.removeMode
-      ? 'وضع الإزالة مفعّل — اضغط موافق على أي بطاقة لإضافتها/حذفها'
-      : 'وضع الإزالة أُوقف');
+    if (!browse.removeMode) { box.textContent = '🗑 تحديد للحذف'; return; }
+    var n = Object.keys(browse.selectedKeys || {}).length;
+    box.textContent = n > 0 ? ('✅ تأكيد حذف (' + n + ')') : '🗑 إلغاء التحديد';
+  }
+
+  function toggleSelectAt(idx) {
+    var it = browse.items[idx];
+    var k = Storage.keyOf(browse.kind, it);
+    if (browse.selectedKeys[k]) delete browse.selectedKeys[k];
+    else browse.selectedKeys[k] = true;
+    var selected = !!browse.selectedKeys[k];
+    var el = browse.itemEls[idx];
+    if (browse.kind === 'live') {
+      var span = el.querySelector('.channel-name');
+      var dot = it.tv_archive ? '<span class="archive-dot" title="تدعم إعادة البث">●</span>' : '';
+      span.innerHTML = dot + (selected ? '✅' : '⬜') + ' ' + esc(it.name);
+    } else {
+      var label = el.querySelector('.tile-label');
+      label.innerHTML = (selected ? '✅' : '⬜') + ' ' + esc(it.name);
+    }
+    updateRemoveModeBoxLabel();
+  }
+
+  /* ينفّذ الحذف الفعلي لكل العناصر المحدَّدة، بحسب القسم الحالي (مفضلة/مشاهدات أخيرة/قائمة مخصّصة) */
+  function confirmDeleteSelected() {
+    var removed = 0;
+    browse.items.forEach(function (it) {
+      var k = Storage.keyOf(browse.kind, it);
+      if (!browse.selectedKeys[k]) return;
+      if (browse.mode === 'recent') { Storage.removeRecent(current.id, browse.kind, it); removed++; }
+      else if (browse.mode === 'fav') { if (Storage.isFav(current.id, browse.kind, it)) { Storage.toggleFav(current.id, browse.kind, it); removed++; } }
+      else if (browse.mode === 'customView') { if (Storage.isInCustomList(current.id, browse.customListId, it)) { Storage.toggleCustomListItem(current.id, browse.customListId, it); removed++; } }
+    });
+    toast(removed ? ('حُذف ' + removed + (removed === 1 ? ' عنصر' : ' عناصر')) : 'لم يُحذف شيء');
+    browse.removeMode = false;
+    browse.selectedKeys = {};
+    updateRemoveModeBoxLabel();
+    var fresh = browse.mode === 'recent' ? Storage.recentList(current.id, browse.kind)
+      : browse.mode === 'fav' ? Storage.favList(current.id, browse.kind)
+      : Storage.customListItems(current.id, browse.customListId);
+    browse.rawItems = fresh;
+    if (fresh.length) { renderItems(fresh, true); }
+    else { $('items-list').innerHTML = ''; browse.itemEls = []; browse.items = []; focusCats(); }
+  }
+
+  function toggleRemoveMode() {
+    if (!browse.removeMode) {
+      browse.removeMode = true;
+      browse.selectedKeys = {};
+      updateRemoveModeBoxLabel();
+      renderItems(browse.items, true);
+      toast('اختر البطاقات المطلوب حذفها بـ"موافق"، ثم اضغط هذا الزر مرة أخرى للتأكيد');
+      return;
+    }
+    if (Object.keys(browse.selectedKeys).length) { confirmDeleteSelected(); return; }
+    browse.removeMode = false;
+    updateRemoveModeBoxLabel();
+    renderItems(browse.items, true);
   }
   function clearColFocus() {
     browse.catEls.forEach(function (e) { e.classList.remove('focused'); });
@@ -487,9 +545,12 @@
     browse.itemFilterText = '';
     $('search-items-box').textContent = '🔍 بحث في هذا القسم…';
     browse.removeMode = false;
-    var rmBox = $('remove-mode-box');
-    rmBox.textContent = '🗑 وضع الإزالة: إيقاف';
-    rmBox.classList.remove('on');
+    browse.selectedKeys = {};
+    // زر "تحديد للحذف" مفيد فقط بأقسام تحتوي عناصر يمكن حذفها (مفضلة/مشاهدات أخيرة/قائمة مخصّصة)
+    var supportsDelete = browse.mode === 'fav' || browse.mode === 'recent' || browse.mode === 'customView';
+    $('remove-mode-box').classList.toggle('hidden', !supportsDelete);
+    browse.searchIdx = Math.min(browse.searchIdx, searchMaxIdx());
+    updateRemoveModeBoxLabel();
   }
 
   function focusCats() {
@@ -662,15 +723,22 @@
     var end = Math.min(start + PAGE_SIZE(), browse.items.length);
     for (var i = start; i < end; i++) {
       var it = browse.items[i];
-      var isFavd = browse.mode === 'customPick'
-        ? Storage.isInCustomList(current.id, browse.customListId, it)
-        : Storage.isFav(current.id, browse.kind, it);
       var el;
-      if (browse.kind === 'live') {
-        el = makeChannelItem(it, isFavd, browse.mode === 'customPick' ? '✅' : '⭐');
+      if (browse.removeMode) {
+        var selected = !!browse.selectedKeys[Storage.keyOf(browse.kind, it)];
+        var mark = selected ? '✅' : '⬜';
+        if (browse.kind === 'live') el = makeChannelItem(it, true, mark);
+        else el = makeTile(it.stream_icon || it.cover || '', mark + ' ' + esc(it.name), tileMeta(it));
       } else {
-        var star = isFavd ? '⭐ ' : '';
-        el = makeTile(it.stream_icon || it.cover || '', star + esc(it.name), tileMeta(it));
+        var isFavd = browse.mode === 'customPick'
+          ? Storage.isInCustomList(current.id, browse.customListId, it)
+          : Storage.isFav(current.id, browse.kind, it);
+        if (browse.kind === 'live') {
+          el = makeChannelItem(it, isFavd, browse.mode === 'customPick' ? '✅' : '⭐');
+        } else {
+          var star = isFavd ? '⭐ ' : '';
+          el = makeTile(it.stream_icon || it.cover || '', star + esc(it.name), tileMeta(it));
+        }
       }
       box.appendChild(el);
       browse.itemEls.push(el);
@@ -874,7 +942,8 @@
       return;
     }
     var it = browse.items[idx];
-    if (browse.mode === 'customPick' || browse.removeMode) { redButton(); return; }
+    if (browse.removeMode) { toggleSelectAt(idx); return; }
+    if (browse.mode === 'customPick') { redButton(); return; }
     stopPreviewVideo();
     if (browse.kind === 'live') {
       // القناة المباشرة تُشغَّل فوراً عند الاختيار — فتسجيلها بالمشاهدات الأخيرة هنا صحيح
@@ -901,7 +970,7 @@
   function handleBrowseKeys(k, ev) {
     if (browse.zone === 'search') {
       switch (k) {
-        case 37: ev.preventDefault(); browse.searchIdx = Math.min(2, browse.searchIdx + 1); paintSearchFocus(); return;
+        case 37: ev.preventDefault(); browse.searchIdx = Math.min(searchMaxIdx(), browse.searchIdx + 1); paintSearchFocus(); return;
         case 39: ev.preventDefault(); browse.searchIdx = Math.max(0, browse.searchIdx - 1); paintSearchFocus(); return;
         case 40: ev.preventDefault(); focusCats(); return;
         case 13: ev.preventDefault();
