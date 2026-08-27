@@ -441,14 +441,23 @@
   }
 
   /* شريط بحث سريع داخل القسم/التصنيف الحالي فقط (يفلتر ما هو محمَّل بلا نداء جديد للسيرفر)،
-     وبجانبه — بالأقسام القابلة للحذف فقط — زر "تحديد للحذف" مكرَّر هنا أيضاً (بالإضافة لأعلى
-     الشاشة) ليكون ظاهراً مباشرة فوق البطاقات ويسهل إيجاده بلا تنقّل بعيد */
+     وفوقه — بالأقسام القابلة للحذف فقط — زر "تحديد للحذف" مكرَّر هنا أيضاً (بالإضافة لأعلى
+     الشاشة) ليكون ظاهراً مباشرة فوق البطاقات ويسهل إيجاده بلا تنقّل بعيد. الترتيب المنطقي
+     يتبع الترتيب المرئي الفعلي (زر الحذف إن ظهر يأتي قبل مربع البحث) بدل فهرس ثابت، حتى يبقى
+     التنقّل صحيحاً سواء ظهر زر الحذف أو اختفى */
+  function itemBarBoxes() {
+    var boxes = [];
+    if (!$('delete-tile-box').classList.contains('hidden')) boxes.push('delete-tile-box');
+    boxes.push('search-items-box');
+    return boxes;
+  }
   function paintItemBarFocus() {
-    $('search-items-box').classList.toggle('focused', browse.itemBarIdx === 0);
-    $('delete-tile-box').classList.toggle('focused', browse.itemBarIdx === 1);
+    var boxes = itemBarBoxes();
+    $('search-items-box').classList.toggle('focused', boxes[browse.itemBarIdx] === 'search-items-box');
+    $('delete-tile-box').classList.toggle('focused', boxes[browse.itemBarIdx] === 'delete-tile-box');
   }
   function itemBarMaxIdx() {
-    return $('delete-tile-box').classList.contains('hidden') ? 0 : 1;
+    return itemBarBoxes().length - 1;
   }
   function focusItemSearch() {
     stopPreviewVideo();
@@ -1036,7 +1045,7 @@
         case 37: ev.preventDefault(); browse.itemBarIdx = Math.min(itemBarMaxIdx(), browse.itemBarIdx + 1); paintItemBarFocus(); return;
         case 39: ev.preventDefault(); browse.itemBarIdx = Math.max(0, browse.itemBarIdx - 1); paintItemBarFocus(); return;
         case 13: ev.preventDefault();
-          if (browse.itemBarIdx === 0) startItemSearch(); else toggleRemoveMode();
+          if (itemBarBoxes()[browse.itemBarIdx] === 'search-items-box') startItemSearch(); else toggleRemoveMode();
           return;
         case 10009: case 27: ev.preventDefault(); back(); return;
       }
