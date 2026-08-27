@@ -54,6 +54,8 @@ body.in-player, body.in-player .screen, body.in-player #html5-player {
   color: #9fb4d8;
 }
 .search-box.focused { background: #2e6fd8; color: #fff; }
+.search-box.on { background: #7a2020; color: #ffd7d7; }
+.search-box.on.focused { background: #b53030; color: #fff; }
 
 /* أعمدة التصفح */
 .browse-cols { display: flex; gap: 40px; height: 780px; }

@@ -285,7 +285,7 @@
   var GRID_COLS = 4;
   var browse = {
     kind: null, zone: 'cats', catEls: [], itemEls: [], items: [], rawItems: [], catIdx: 0,
-    catMap: {}, rawCats: [], mode: 'normal', itemsLayoutCols: 1, searchIdx: 0, catFilterText: '', itemFilterText: ''
+    catMap: {}, rawCats: [], mode: 'normal', itemsLayoutCols: 1, searchIdx: 0, catFilterText: '', itemFilterText: '', removeMode: false
   };
 
   function openBrowse(kind, title) {
@@ -293,7 +293,7 @@
     screenStack.push(homeScreen);
     browse = {
       kind: kind, zone: 'cats', catEls: [], itemEls: [], items: [], rawItems: [], catIdx: 0,
-      catMap: {}, catCounts: {}, rawCats: [], mode: 'normal', itemsLayoutCols: 1, searchIdx: 0, catFilterText: '', itemFilterText: ''
+      catMap: {}, catCounts: {}, rawCats: [], mode: 'normal', itemsLayoutCols: 1, searchIdx: 0, catFilterText: '', itemFilterText: '', removeMode: false
     };
     show('screen-browse');
     $('browse-title').textContent = title + ' — ' + current.name;
@@ -342,10 +342,25 @@
   function clearSearchFocus() {
     $('search-content-box').classList.remove('focused');
     $('search-cats-box').classList.remove('focused');
+    $('remove-mode-box').classList.remove('focused');
   }
   function paintSearchFocus() {
     $('search-content-box').classList.toggle('focused', browse.searchIdx === 0);
     $('search-cats-box').classList.toggle('focused', browse.searchIdx === 1);
+    $('remove-mode-box').classList.toggle('focused', browse.searchIdx === 2);
+  }
+
+  /* "وضع الإزالة": بديل موثوق للضغطة الطويلة على "موافق" (لا تصل بثبات لكل الريموتات الفعلية) —
+     بعد تفعيله، ضغطة "موافق" العادية على أي بطاقة تنفّذ نفس فعل الزر الأحمر (redButton) مباشرة
+     بدل فتح شاشة المعلومات أو تشغيل القناة. يبقى مفعّلاً حتى يُطفئه المستخدم يدوياً أو يغادر القسم. */
+  function toggleRemoveMode() {
+    browse.removeMode = !browse.removeMode;
+    var box = $('remove-mode-box');
+    box.textContent = '🗑 وضع الإزالة: ' + (browse.removeMode ? 'تشغيل ✓' : 'إيقاف');
+    box.classList.toggle('on', browse.removeMode);
+    toast(browse.removeMode
+      ? 'وضع الإزالة مفعّل — اضغط موافق على أي بطاقة لإضافتها/حذفها'
+      : 'وضع الإزالة أُوقف');
   }
   function clearColFocus() {
     browse.catEls.forEach(function (e) { e.classList.remove('focused'); });
@@ -471,6 +486,10 @@
   function resetItemSearchBox() {
     browse.itemFilterText = '';
     $('search-items-box').textContent = '🔍 بحث في هذا القسم…';
+    browse.removeMode = false;
+    var rmBox = $('remove-mode-box');
+    rmBox.textContent = '🗑 وضع الإزالة: إيقاف';
+    rmBox.classList.remove('on');
   }
 
   function focusCats() {
@@ -855,7 +874,7 @@
       return;
     }
     var it = browse.items[idx];
-    if (browse.mode === 'customPick') { redButton(); return; }
+    if (browse.mode === 'customPick' || browse.removeMode) { redButton(); return; }
     stopPreviewVideo();
     if (browse.kind === 'live') {
       // القناة المباشرة تُشغَّل فوراً عند الاختيار — فتسجيلها بالمشاهدات الأخيرة هنا صحيح
@@ -882,10 +901,14 @@
   function handleBrowseKeys(k, ev) {
     if (browse.zone === 'search') {
       switch (k) {
-        case 37: ev.preventDefault(); browse.searchIdx = Math.min(1, browse.searchIdx + 1); paintSearchFocus(); return;
+        case 37: ev.preventDefault(); browse.searchIdx = Math.min(2, browse.searchIdx + 1); paintSearchFocus(); return;
         case 39: ev.preventDefault(); browse.searchIdx = Math.max(0, browse.searchIdx - 1); paintSearchFocus(); return;
         case 40: ev.preventDefault(); focusCats(); return;
-        case 13: ev.preventDefault(); if (browse.searchIdx === 0) startSearch(); else startCatSearch(); return;
+        case 13: ev.preventDefault();
+          if (browse.searchIdx === 0) startSearch();
+          else if (browse.searchIdx === 1) startCatSearch();
+          else toggleRemoveMode();
+          return;
         case 10009: case 27: ev.preventDefault(); back(); return;
       }
       return;
