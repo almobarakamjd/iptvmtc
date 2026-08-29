@@ -1230,6 +1230,57 @@
     return (h ? h + 'س ' : '') + (m || !h ? m + 'د' : '');
   }
 
+  /* ---------- مشروع قاعدة بيانات الممثلين (تسجيل عضوي) — انظر readme.md ----------
+     كل مرة يفتح المستخدم تفاصيل فيلم/مسلسل فعلياً (يعني أصلاً يستدعي get_vod_info/
+     get_series_info من Xtream)، نرسل نفس الرد لخادمنا أيضاً — بلا أي طلب إضافي على
+     سيرفر IPTV إطلاقاً. فشل هذا الإرسال (لا إنترنت للخادم، إلخ) يُتجاهَل بصمت تماماً
+     ولا يجب أن يؤثر على تجربة المستخدم بأي شكل. */
+  var ACTORS_API_BASE = 'https://amjd.law/apps/ipv/';
+  var ACTORS_API_TOKEN = 'mytvplus_actors_7hQ2mZk9Lp4x';
+
+  /* يستنتج لغة الفيلم من بادئة اسمه (مثل "EN - Deep Water" أو "AR - ...") — لا يوجد
+     حقل مباشر لهذا بـXtream، وبطلب صريح لا نتجاهل هذه المعلومة رغم كونها استنتاجاً */
+  function inferLang(name) {
+    var m = (name || '').match(/^([A-Za-z]{2,3})\s*-\s*/);
+    return m ? m[1].toUpperCase() : null;
+  }
+
+  function reportTitleToActorsDb(kind, item, d) {
+    try {
+      var xtreamId = kind === 'series' ? item.series_id : item.stream_id;
+      if (!xtreamId) return;
+      var year = parseInt(d.year || d.releaseDate || d.release_date, 10);
+      var rating = parseFloat(d.rating_5based || d.rating);
+      var duration = parseInt(d.duration_secs, 10);
+      var catName = (browse.catMap && browse.catMap[item.category_id]) || null;
+      var payload = {
+        token: ACTORS_API_TOKEN,
+        subscription_id: current.id,
+        kind: kind === 'series' ? 'series' : 'movie',
+        xtream_id: xtreamId,
+        name: item.name || '',
+        year: isNaN(year) ? null : year,
+        studio: d.studio || null,
+        director: d.director || null,
+        rating: isNaN(rating) ? null : rating,
+        country: d.country || null,
+        lang: inferLang(item.name),
+        genre: d.genre || null,
+        plot: d.plot || d.description || null,
+        duration_secs: isNaN(duration) ? null : duration,
+        poster: item.stream_icon || item.cover || d.cover || null,
+        container_extension: item.container_extension || null,
+        category_id: item.category_id || null,
+        category_name: catName,
+        cast: d.cast || d.actors || null
+      };
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', ACTORS_API_BASE + 'ingest.php', true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.send(JSON.stringify(payload));
+    } catch (e) { /* تجاهل — تسجيل ثانوي غير حرج */ }
+  }
+
   function infoMetaLine(fields) {
     var bits = [];
     if (fields.year) bits.push(fields.year);
@@ -1339,6 +1390,7 @@
       $('info-plot').textContent = d.plot || d.description || '';
       if (!posterUrl && d.cover) { poster.src = d.cover; poster.style.visibility = 'visible'; }
       renderActions(info);
+      reportTitleToActorsDb(kind, item, d); // تسجيل عضوي لمشروع قاعدة بيانات الممثلين — انظر readme.md
     }, function () { loader(false); });
   }
 
