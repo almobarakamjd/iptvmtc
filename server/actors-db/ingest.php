@@ -47,11 +47,12 @@ $stmt = $conn->prepare(
         container_extension=VALUES(container_extension), category_id=VALUES(category_id),
         category_name=VALUES(category_name), id=LAST_INSERT_ID(id)'
 );
+if (!$stmt) { http_response_code(500); die(json_encode(['error' => 'sql_prepare_failed', 'detail' => $conn->error])); }
 $year = isset($data['year']) ? intval($data['year']) : null;
 $rating = isset($data['rating']) ? floatval($data['rating']) : null;
 $duration = isset($data['duration_secs']) ? intval($data['duration_secs']) : null;
 $stmt->bind_param(
-    'ssisssssssssidsss',
+    'ssisisssssisssss',
     $data['subscription_id'], $data['kind'], $data['xtream_id'], $data['name'],
     $year, $data['studio'], $data['director'], $rating, $data['country'],
     $data['lang'], $data['genre'], $data['plot'], $duration,
@@ -67,6 +68,7 @@ if (!empty($data['cast'])) {
     $insA = $conn->prepare('INSERT IGNORE INTO actors (name) VALUES (?)');
     $selA = $conn->prepare('SELECT id FROM actors WHERE name = ?');
     $link = $conn->prepare('INSERT IGNORE INTO actor_title (actor_id, title_id) VALUES (?, ?)');
+    if (!$insA || !$selA || !$link) { http_response_code(500); die(json_encode(['error' => 'sql_prepare_failed', 'detail' => $conn->error])); }
     foreach ($names as $name) {
         if ($name === '') continue;
         $insA->bind_param('s', $name);

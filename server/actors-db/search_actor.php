@@ -26,6 +26,10 @@ if (!empty($_GET['subscription_id'])) {
 $sql .= ' ORDER BY t.rating DESC, t.year DESC LIMIT 300';
 
 $stmt = $conn->prepare($sql);
+if (!$stmt) {
+    http_response_code(500);
+    die(json_encode(['error' => 'sql_prepare_failed', 'detail' => $conn->error]));
+}
 $stmt->bind_param($types, ...$params);
 $stmt->execute();
 $res = $stmt->get_result();

@@ -5,3 +5,4 @@ android/local.properties
 *.apk
 glithes/
 *.srt
+server/actors-db/config.php
