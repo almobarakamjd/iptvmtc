@@ -164,6 +164,28 @@ var Storage = (function () {
   }
   function setPageSize(n) { try { localStorage.setItem(PAGE_SIZE_KEY, String(n)); } catch (e) {} }
 
+  /* مدى طلبات الزحف الخلفي اليومية لبناء قاعدة بيانات الممثلين (مشروع مستقبلي) — العدد الفعلي
+     يُختار عشوائياً كل يوم بين الحدّين (min-max) بدل رقم ثابت، حتى لا يبدو نمط الطلبات آلياً
+     بانتظام مريب. min=max=0 يعني إيقاف الزحف كلياً. الافتراضي منخفض عمداً (تصعيد تدريجي آمن) */
+  var CRAWL_MIN_KEY = 'aftv_crawl_daily_min_v1';
+  var CRAWL_MAX_KEY = 'aftv_crawl_daily_max_v1';
+  function getDailyCrawlRange() {
+    try {
+      var mn = parseInt(localStorage.getItem(CRAWL_MIN_KEY), 10);
+      var mx = parseInt(localStorage.getItem(CRAWL_MAX_KEY), 10);
+      if (isNaN(mn)) mn = 10;
+      if (isNaN(mx)) mx = 15;
+      if (mx < mn) mx = mn;
+      return { min: mn, max: mx };
+    } catch (e) { return { min: 10, max: 15 }; }
+  }
+  function setDailyCrawlRange(min, max) {
+    try {
+      localStorage.setItem(CRAWL_MIN_KEY, String(min));
+      localStorage.setItem(CRAWL_MAX_KEY, String(max));
+    } catch (e) {}
+  }
+
   /* قوائم مخصّصة للقنوات المباشرة فقط — منفصلة عن المفضلة، بأسماء ينشئها المستخدم */
   var LISTS_KEY = 'aftv_customlists_v1';
   function loadLists() {
@@ -251,6 +273,8 @@ var Storage = (function () {
     setPreferredPlayer: setPreferredPlayer,
     getPageSize: getPageSize,
     setPageSize: setPageSize,
+    getDailyCrawlRange: getDailyCrawlRange,
+    setDailyCrawlRange: setDailyCrawlRange,
     listAllCustom: listAllCustom,
     createCustomList: createCustomList,
     renameCustomList: renameCustomList,

@@ -139,9 +139,11 @@ public class MainActivity extends Activity {
         }
 
         /* pkg: اسم حزمة المشغّل المفضل (مثلاً org.videolan.vlc) أو نص فارغ = اسأل دائماً (نافذة اختيار أندرويد)
-           title: اسم الفيلم/الحلقة — بدونه بعض المشغّلات (منها مشغّل التلفاز الافتراضي) تعرض رقم
-           القناة/الفيلم المستخرج من الرابط نفسه بدل اسمه الحقيقي. نرسله بأكثر من مفتاح (title و
-           android.intent.extra.TITLE) لتغطية أوسع عدد من المشغّلات المختلفة. */
+           title: اسم الفيلم/الحلقة — بدونه بعض المشغّلات تعرض رقم القناة/الفيلم المستخرج من الرابط
+           نفسه بدل اسمه الحقيقي. المفتاح "title" (نص بسيط) هو الموثّق فعلياً في توثيق VLC وMX
+           Player الرسمي لعرض اسم الفيديو — وليس android.intent.extra.TITLE كما ظُنَّ سابقاً (تأكّد
+           بالتجربة الفعلية أن MX استمر بعرض الرقم بعد استخدام EXTRA_TITLE وحده)، لذا نرسل الاثنين
+           معاً الآن لتغطية أوسع عدد من المشغّلات. */
         @JavascriptInterface
         public void playVideo(final String u, final String pkg, final String title) {
             runOnUiThread(new Runnable() {
@@ -168,12 +170,12 @@ public class MainActivity extends Activity {
             });
         }
 
-        /* android.intent.extra.TITLE فقط — هو المفتاح الموثّق والمعروف الذي تفهمه VLC وMX Player
-           ومشغّل أندرويد الافتراضي لعرض اسم الفيديو. تجنّبنا إضافة مفتاح "title" العام إضافياً
-           لأنه غير موثّق رسمياً وقد يتعارض مع معالجة داخلية مختلفة لدى بعض المشغّلات. */
         private void addTitleExtras(Intent intent, String title) {
             if (title == null || title.length() == 0) return;
-            try { intent.putExtra(Intent.EXTRA_TITLE, title); } catch (Exception ignored) {}
+            try {
+                intent.putExtra("title", title);          // المفتاح الذي يقرأه VLC وMX Player فعلياً
+                intent.putExtra(Intent.EXTRA_TITLE, title); // إضافي لتغطية مشغّلات أخرى قد تعتمده
+            } catch (Exception ignored) {}
         }
 
         /* يكتب قائمة تشغيل M3U مؤقّتة (كل قنوات نفس التصنيف/القائمة المخصّصة) ويفتحها بمشغّل خارجي —

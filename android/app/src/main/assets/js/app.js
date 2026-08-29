@@ -1686,6 +1686,12 @@
     box.appendChild(pageSizeEl); els.push(pageSizeEl);
     actions.push(changePageSize);
 
+    var crawlR = Storage.getDailyCrawlRange();
+    var crawlEl = makeItem('🕷 طلبات بناء قاعدة الممثلين يومياً: <span class="sub">' +
+      (crawlR.max > 0 ? (crawlR.min + ' - ' + crawlR.max) : 'متوقف') + '</span>');
+    box.appendChild(crawlEl); els.push(crawlEl);
+    actions.push(changeDailyCrawlRange);
+
     if (typeof AndroidSystem !== 'undefined' && AndroidSystem.openAccessibilitySettings) {
       var zapOn = AndroidSystem.isRemoteZapEnabled();
       var zapEl = makeItem('🔀 تبديل القنوات بسهم فوق/تحت أثناء العرض: <span class="sub">' +
@@ -1735,6 +1741,25 @@
       if (n > 2000) n = 2000;
       Storage.setPageSize(n);
       toast('عدد البطاقات بالدفعة: ' + n);
+      openSettings();
+    });
+  }
+
+  /* مدى الطلبات اليومية لمشروع قاعدة بيانات الممثلين (زحف خلفي تدريجي — انظر readme.md) —
+     العدد الفعلي كل يوم يُختار عشوائياً بين الحدّين بدل رقم ثابت (لا يبدو نمطاً آلياً منتظماً).
+     min=max=0 يعني إيقاف كامل. يبدأ منخفضاً عمداً للتصعيد التدريجي الآمن بدل قفزة مباشرة */
+  function changeDailyCrawlRange() {
+    var cur = Storage.getDailyCrawlRange();
+    promptInput(null, cur.min + '-' + cur.max, 'مدى الطلبات اليومية (مثال: 10-20، أو 0-0 للإيقاف)…', function (v) {
+      if (v === null) { openSettings(); return; }
+      var parts = v.split('-').map(function (s) { return parseInt(s.trim(), 10); });
+      var mn = parts[0], mx = parts[1];
+      if (isNaN(mn) || mn < 0) mn = 0;
+      if (isNaN(mx) || mx < mn) mx = mn;
+      if (mx > 200) mx = 200;
+      if (mn > mx) mn = mx;
+      Storage.setDailyCrawlRange(mn, mx);
+      toast('طلبات بناء قاعدة الممثلين يومياً: ' + (mx > 0 ? (mn + ' - ' + mx) : 'متوقف'));
       openSettings();
     });
   }
