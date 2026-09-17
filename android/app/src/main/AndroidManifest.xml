@@ -6,6 +6,11 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 
+    <!-- لمعرفة هل مشغّل myTv+ الخاص مثبّت (أندرويد 11+ يُخفي التطبيقات الأخرى افتراضياً) -->
+    <queries>
+        <package android:name="com.oqod.movie_player" />
+    </queries>
+
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 

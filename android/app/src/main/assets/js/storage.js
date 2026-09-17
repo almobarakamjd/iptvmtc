@@ -153,6 +153,13 @@ var Storage = (function () {
       return localStorage.getItem(PLAYER_PREF_LEGACY_KEY) || '';
     } catch (e) { return ''; }
   }
+  /* هل اختار المستخدم مشغّلاً صراحةً (ولو "اسأل دائماً")؟ — إن لم يختر، نفضّل مشغّلنا الخاص إن كان مثبّتاً */
+  function hasPreferredPlayer(kind) {
+    try {
+      return localStorage.getItem(PLAYER_PREF_KEYS[kind] || PLAYER_PREF_KEYS.live) !== null ||
+        localStorage.getItem(PLAYER_PREF_LEGACY_KEY) !== null;
+    } catch (e) { return false; }
+  }
   function setPreferredPlayer(kind, pkg) {
     try { localStorage.setItem(PLAYER_PREF_KEYS[kind] || PLAYER_PREF_KEYS.live, pkg || ''); } catch (e) {}
   }
@@ -270,6 +277,7 @@ var Storage = (function () {
     removeRecent: removeRecent,
     isInRecent: isInRecent,
     getPreferredPlayer: getPreferredPlayer,
+    hasPreferredPlayer: hasPreferredPlayer,
     setPreferredPlayer: setPreferredPlayer,
     getPageSize: getPageSize,
     setPageSize: setPageSize,

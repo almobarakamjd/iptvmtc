@@ -170,6 +170,35 @@ public class MainActivity extends Activity {
             });
         }
 
+        /* مشغّل myTv+ الخاص (مشروع movie_player): يستقبل JSON كامل — قائمة القنوات/الحلقات، بيانات
+           الإعادة، ورقم TMDB للترجمة. يعيد false إن لم يكن مثبّتاً ليرجع app.js لطريقة VLC/MX */
+        @JavascriptInterface
+        public boolean playInPlayer(String payloadJson) {
+            Intent intent = new Intent("com.oqod.movie_player.PLAY");
+            intent.setPackage("com.oqod.movie_player");
+            intent.putExtra("com.oqod.movie_player.PAYLOAD", payloadJson);
+            try {
+                startActivity(intent);
+                return true;
+            } catch (ActivityNotFoundException e) {
+                return false;
+            } catch (RuntimeException e) {
+                // حجم البيانات تجاوز حد أندرويد (TransactionTooLarge) أو خطأ غير متوقع
+                Log.w("myTvPlus", "playInPlayer failed", e);
+                return false;
+            }
+        }
+
+        @JavascriptInterface
+        public boolean isInstalled(String pkg) {
+            try {
+                getPackageManager().getPackageInfo(pkg, 0);
+                return true;
+            } catch (PackageManager.NameNotFoundException e) {
+                return false;
+            }
+        }
+
         private void addTitleExtras(Intent intent, String title) {
             if (title == null || title.length() == 0) return;
             try {

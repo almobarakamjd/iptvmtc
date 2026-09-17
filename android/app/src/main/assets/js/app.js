@@ -1138,6 +1138,7 @@
      واحدة فيُخرّب رسم النص على الأجهزة الضعيفة (نفس فئة مشكلة تجمّد مكتبة الـ177 ألف فيلم
      السابقة) — تقسيمها بالموسم يبقي كل شاشة بعدد حلقات معقول (عادة أقل من 30). */
   function openSeriesEpisodes(series, info) {
+    player.seriesMeta = titleMeta(info, series.name);
     var seasons = (info && info.episodes) || {};
     var seasonKeys = Object.keys(seasons).filter(function (s) { return (seasons[s] || []).length; })
       .sort(function (a, b) { return a - b; });
@@ -1200,6 +1201,7 @@
      "الملف التالي" المدمج أصلاً بـVLC/MX ينقل تلقائياً للحلقة التالية حتى لو كانت بموسم لاحق،
      بلا أي تدخل من تطبيقنا أثناء العرض */
   function playSeriesEpisode(series, allEps, idx) {
+    if (effectivePlayer('series') === OUR_PLAYER && playSeriesInOurPlayer(series, allEps, idx)) return;
     if (allEps.length > 1 && playExternalEpisodePlaylist(series, allEps, idx)) return;
     var ep = allEps[idx];
     playStream('series', ep.id, ep.container_extension, series.name + ' — حلقة ' + ep.episode_num);
@@ -1212,7 +1214,7 @@
       var label = (series.name + ' — م' + ep.season + ' ح' + ep.episode_num).replace(/[\r\n]/g, ' ');
       return '#EXTINF:-1,' + label + '\n' + Xtream.streamUrl(current, 'series', ep.id, ep.container_extension);
     }).join('\n') + '\n';
-    AndroidOpen.playPlaylist(m3u, Storage.getPreferredPlayer('series'));
+    AndroidOpen.playPlaylist(m3u, effectivePlayer('series'));
     return true;
   }
 
@@ -1347,6 +1349,7 @@
       if (kind === 'vod') {
         opts.push(['▶ تشغيل الفيلم', function () {
           Storage.addRecent(current.id, 'vod', item);
+          player.movieMeta = titleMeta(info, item.name);
           playStream('movie', item.stream_id, item.container_extension, item.name);
         }]);
       } else {
@@ -1394,13 +1397,118 @@
     }, function () { loader(false); });
   }
 
+
+  /* ---------- مشغّل myTv+ الخاص (com.oqod.movie_player) ----------
+     بدل رابط مفرد أو قائمة M3U، نرسل له كل ما يحتاجه دفعة واحدة: قائمة القنوات/الحلقات كاملة،
+     بيانات الإعادة (tv_archive + بيانات Xtream لرابط timeshift)، ورقم TMDB والسنة للبحث عن الترجمة.
+     إن لم يكن مثبّتاً (أو فشل فتحه) نرجع تلقائياً لطريقة VLC/MX المعتادة. */
+  var OUR_PLAYER = 'com.oqod.movie_player';
+  var ourPlayerInstalledCache = null;
+  function ourPlayerInstalled() {
+    if (ourPlayerInstalledCache === null) {
+      try {
+        ourPlayerInstalledCache = typeof AndroidOpen !== 'undefined' && !!AndroidOpen.isInstalled &&
+          AndroidOpen.isInstalled(OUR_PLAYER);
+      } catch (e) { ourPlayerInstalledCache = false; }
+    }
+    return ourPlayerInstalledCache;
+  }
+  /* المشغّل الفعلي لكل نوع: اختيار المستخدم إن وُجد، وإلا مشغّلنا إن كان مثبّتاً */
+  function effectivePlayer(kind) {
+    migrateToOurPlayerOnce();
+    if (!Storage.hasPreferredPlayer(kind) && ourPlayerInstalled()) return OUR_PLAYER;
+    return Storage.getPreferredPlayer(kind);
+  }
+
+  /* مرة واحدة فقط عند أول تثبيت لمشغّلنا: نجعله المشغّل للقنوات والأفلام والمسلسلات حتى لو كان
+     VLC/MX مختاراً سابقاً — ويبقى تغييره متاحاً من الإعدادات بعدها كالمعتاد */
+  var OUR_PLAYER_MIGRATION_KEY = 'aftv_our_player_default_v1';
+  function migrateToOurPlayerOnce() {
+    try {
+      if (localStorage.getItem(OUR_PLAYER_MIGRATION_KEY) || !ourPlayerInstalled()) return;
+      ['live', 'movie', 'series'].forEach(function (k) { Storage.setPreferredPlayer(k, OUR_PLAYER); });
+      localStorage.setItem(OUR_PLAYER_MIGRATION_KEY, '1');
+    } catch (e) {}
+  }
+
+  function titleMeta(info, fallbackName) {
+    var d = (info && info.info) || {};
+    var year = String(d.year || d.releasedate || d.releaseDate || d.release_date || '').slice(0, 4);
+    return {
+      tmdbId: String(d.tmdb_id || d.tmdb || ''),
+      imdbId: String(d.imdb_id || ''),
+      year: /^\d{4}$/.test(year) ? year : '',
+      originalName: String(d.o_name || d.name || fallbackName || '')
+    };
+  }
+
+  function sendToOurPlayer(items, index) {
+    if (typeof AndroidOpen === 'undefined' || !AndroidOpen.playInPlayer) return false;
+    var payload = {
+      items: items,
+      index: index,
+      xtream: { host: current.host, user: current.username, pass: current.password }
+    };
+    try { return AndroidOpen.playInPlayer(JSON.stringify(payload)); } catch (e) { return false; }
+  }
+
+  function playInOurPlayer(kind, id, ext, name, srcItem) {
+    if (kind === 'live') {
+      var hasList = player.channelList && player.channelList.length;
+      var list = hasList ? player.channelList : [srcItem || { stream_id: id, name: name }];
+      var idx = hasList ? Math.max(0, player.channelIndex) : 0;
+      // حد أعلى لحجم البيانات المرسلة (قيود أندرويد على حجم الـIntent): 600 قناة حول القناة المختارة
+      var from = Math.max(0, Math.min(idx - 300, list.length - 600));
+      var items = list.slice(from, from + 600).map(function (c) {
+        return {
+          url: Xtream.streamUrl(current, 'live', c.stream_id, null),
+          title: c.name || '',
+          kind: 'live',
+          streamId: String(c.stream_id),
+          archive: Number(c.tv_archive) === 1,
+          archiveDays: Number(c.tv_archive_duration) || 0
+        };
+      });
+      return sendToOurPlayer(items, idx - from);
+    }
+    var meta = (kind === 'movie' ? player.movieMeta : player.seriesMeta) || {};
+    return sendToOurPlayer([{
+      url: Xtream.streamUrl(current, kind, id, ext),
+      title: name || '',
+      kind: kind,
+      streamId: String(id),
+      tmdbId: meta.tmdbId || '',
+      imdbId: meta.imdbId || '',
+      year: meta.year || '',
+      originalName: meta.originalName || ''
+    }], 0);
+  }
+
+  function playSeriesInOurPlayer(series, allEps, idx) {
+    var meta = player.seriesMeta || {};
+    var items = allEps.map(function (ep) {
+      return {
+        url: Xtream.streamUrl(current, 'series', ep.id, ep.container_extension),
+        title: (series.name + ' — م' + ep.season + ' ح' + ep.episode_num).replace(/[\r\n]/g, ' '),
+        kind: 'series',
+        streamId: String(ep.id),
+        season: Number(ep.season) || 0,
+        episode: Number(ep.episode_num) || 0,
+        tmdbId: meta.tmdbId || '',
+        year: meta.year || '',
+        originalName: meta.originalName || series.name || ''
+      };
+    });
+    return sendToOurPlayer(items, idx);
+  }
+
   /* ---------- المشغّل ----------
      التشغيل الفعلي على أندرويد يتم خارجياً بمشغل مثبَّت أصلاً على الجهاز (VLC/MX Player عادة
      موجودان على أي تلفزيون/بوكس) بدل تضمين محرك فيديو داخل التطبيق — أبسط وأثبت من أي محرك
      مُضمَّن على أجهزة برام محدودة. على تلفزيونات Tizen (لا يوجد AndroidOpen) يبقى المشغّل الداخلي. */
   function playExternally(url, kind, title) {
     if (typeof AndroidOpen !== 'undefined' && AndroidOpen.playVideo) {
-      AndroidOpen.playVideo(url, Storage.getPreferredPlayer(kind), title || '');
+      AndroidOpen.playVideo(url, effectivePlayer(kind), title || '');
       return true;
     }
     return false;
@@ -1416,7 +1524,7 @@
       return '#EXTINF:-1,' + (it.name || 'قناة').replace(/[\r\n]/g, ' ') + '\n' +
         Xtream.streamUrl(current, 'live', it.stream_id, null);
     }).join('\n') + '\n';
-    AndroidOpen.playPlaylist(m3u, Storage.getPreferredPlayer('live'));
+    AndroidOpen.playPlaylist(m3u, effectivePlayer('live'));
     return true;
   }
 
@@ -1424,6 +1532,7 @@
 
   function playStream(kind, id, ext, name, srcItem) {
     var url = Xtream.streamUrl(current, kind, id, ext);
+    if (effectivePlayer(kind) === OUR_PLAYER && playInOurPlayer(kind, id, ext, name, srcItem)) return;
     if (kind === 'live' && player.channelList && player.channelList.length > 1
         && playExternalPlaylist(player.channelList, player.channelIndex)) return;
     if (playExternally(url, kind, name)) return;
@@ -1729,7 +1838,7 @@
     actions.push(cloudRestore);
 
     PLAYER_KIND_ORDER.forEach(function (k) {
-      var el = makeItem(PLAYER_KIND_LABELS[k] + ': <span class="sub">' + PLAYER_CHOICE_NAMES[Storage.getPreferredPlayer(k)] + '</span>');
+      var el = makeItem(PLAYER_KIND_LABELS[k] + ': <span class="sub">' + PLAYER_CHOICE_NAMES[effectivePlayer(k)] + '</span>');
       box.appendChild(el); els.push(el);
       actions.push(function () { cyclePreferredPlayer(k); });
     });
@@ -1763,9 +1872,10 @@
   }
 
   /* ---------- المشغّل المفضل لفتح البث خارجياً — منفصل لكل نوع محتوى ---------- */
-  var PLAYER_CHOICES = ['', 'org.videolan.vlc', 'com.mxtech.videoplayer.ad'];
+  var PLAYER_CHOICES = ['', OUR_PLAYER, 'org.videolan.vlc', 'com.mxtech.videoplayer.ad'];
   var PLAYER_CHOICE_NAMES = {
     '': 'اسأل دائماً',
+    'com.oqod.movie_player': 'مشغّل myTv+',
     'org.videolan.vlc': 'VLC',
     'com.mxtech.videoplayer.ad': 'MX Player'
   };
@@ -1776,7 +1886,7 @@
     series: '📺 مشغّل المسلسلات'
   };
   function cyclePreferredPlayer(kind) {
-    var cur = Storage.getPreferredPlayer(kind);
+    var cur = effectivePlayer(kind);
     var idx = PLAYER_CHOICES.indexOf(cur);
     var next = PLAYER_CHOICES[(idx + 1) % PLAYER_CHOICES.length];
     Storage.setPreferredPlayer(kind, next);
