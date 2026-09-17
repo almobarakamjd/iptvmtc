@@ -301,6 +301,16 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> { if (updates != null) updates.check(true); });
         }
 
+        /** إصدار Player+ المثبّت (فارغ إن لم يكن مثبّتاً) */
+        @JavascriptInterface
+        public String playerVersion() {
+            try {
+                return getPackageManager().getPackageInfo("com.oqod.movie_player", 0).versionName;
+            } catch (PackageManager.NameNotFoundException e) {
+                return "";
+            }
+        }
+
         @JavascriptInterface
         public String appVersion() {
             return updates != null ? updates.versionName() : "";

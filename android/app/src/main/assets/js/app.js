@@ -160,9 +160,22 @@
   }
 
   /* ---------- شاشة الاشتراكات ---------- */
+  /* رقم الإصدار — ليعرف أبو فيصل أي نسخة تعمل فعلاً على التلفاز */
+  function appVersionText() {
+    var v = '';
+    try { if (typeof AndroidSystem !== 'undefined' && AndroidSystem.appVersion) v = AndroidSystem.appVersion(); } catch (e) {}
+    var player = '';
+    try {
+      if (typeof AndroidSystem !== 'undefined' && AndroidSystem.playerVersion) player = AndroidSystem.playerVersion();
+    } catch (e) {}
+    return (v ? 'myTv+ ' + v : '') + (player ? '  •  Player+ ' + player : '  •  Player+ غير مثبّت');
+  }
+
   function showProfiles() {
     screenStack = [];
     show('screen-profiles');
+    var verEl = $('app-version');
+    if (verEl) verEl.textContent = appVersionText();
     var box = $('profiles-list');
     box.innerHTML = '';
     var els = [];
@@ -240,7 +253,7 @@
 
   function homeScreen() {
     show('screen-home');
-    $('home-title').textContent = current.name;
+    $('home-title').textContent = current.name + '  ·  ' + appVersionText();
     var box = $('home-menu');
     box.innerHTML = '';
     var entries = [
