@@ -94,6 +94,34 @@ public class UpdateManager {
         }).start();
     }
 
+    /** تثبيت المشغّل فوراً بطلب المستخدم (بند الشاشة الرئيسية) — بلا أسئلة تأجيل */
+    public void installPlayerNow() {
+        if (busy) return;
+        busy = true;
+        toast("جارٍ الاتصال بخادم الإصدارات…");
+        new Thread(() -> {
+            String url = null, err = null;
+            try {
+                JSONObject v = new JSONObject(new String(download(versionsUrl() + "?t=" + System.currentTimeMillis(), 200_000, null), "UTF-8"));
+                JSONObject player = v.optJSONObject("player");
+                url = player != null ? player.optString("url", "") : "";
+            } catch (Exception e) {
+                err = String.valueOf(e.getMessage());
+                Log.w(TAG, "installPlayerNow", e);
+            }
+            final String u = url, error = err;
+            ui.post(() -> {
+                busy = false;
+                if (act.isFinishing()) return;
+                if (u == null || u.length() == 0) {
+                    toast("تعذر الوصول لخادم الإصدارات: " + error);
+                    return;
+                }
+                downloadAndInstall(u, "PlayerPlus.apk", "Player+");
+            });
+        }).start();
+    }
+
     private void decide(JSONObject versions, boolean manual) {
         JSONObject player = versions.optJSONObject("player");
         JSONObject mytv = versions.optJSONObject("mytv");

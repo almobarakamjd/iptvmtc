@@ -248,6 +248,11 @@
       ['🎬 الأفلام', function () { openBrowse('vod', '🎬 الأفلام'); }],
       ['📀 المسلسلات', function () { openBrowse('series', '📀 المسلسلات'); }]
     ];
+    // بند ظاهر في الشاشة الرئيسية ما دام المشغّل غير مثبّت — أوضح من انتظار نافذة التحديث
+    if (!ourPlayerInstalled(true) && typeof AndroidSystem !== 'undefined' && AndroidSystem.checkUpdates) {
+      entries.push(['⬇️ تنزيل وتثبيت مشغّل Player+ <span class="sub">للترجمة العربية وإعادة البث والتسجيل</span>',
+        function () { AndroidSystem.installPlayer(); }]);
+    }
     if (current.adultPinHash) {
       // مدخل تمويهي: اسمه "الإعدادات" ولا يوحي بشيء — كلمة المرور تُظهر المحتوى المحجوب
       entries.push([
@@ -1412,7 +1417,8 @@
      إن لم يكن مثبّتاً (أو فشل فتحه) نرجع تلقائياً لطريقة VLC/MX المعتادة. */
   var OUR_PLAYER = 'com.oqod.movie_player';
   var ourPlayerInstalledCache = null;
-  function ourPlayerInstalled() {
+  function ourPlayerInstalled(fresh) {
+    if (fresh) ourPlayerInstalledCache = null; // بعد التثبيت مباشرة نحتاج قيمة محدّثة
     if (ourPlayerInstalledCache === null) {
       try {
         ourPlayerInstalledCache = typeof AndroidOpen !== 'undefined' && !!AndroidOpen.isInstalled &&

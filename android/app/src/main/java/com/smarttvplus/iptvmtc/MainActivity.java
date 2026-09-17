@@ -289,6 +289,12 @@ public class MainActivity extends Activity {
             });
         }
 
+        /** زر "تنزيل وتثبيت مشغّل Player+" في الشاشة الرئيسية */
+        @JavascriptInterface
+        public void installPlayer() {
+            runOnUiThread(() -> { if (updates != null) updates.installPlayerNow(); });
+        }
+
         /** زر "التحقق من التحديثات" في إعدادات myTv+ */
         @JavascriptInterface
         public void checkUpdates() {

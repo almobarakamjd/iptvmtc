@@ -1,9 +1,9 @@
 {
   "mytv": {
-    "versionCode": 2,
-    "versionName": "1.1.0",
+    "versionCode": 3,
+    "versionName": "1.2.0",
     "url": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/SmartTVPlus.apk",
-    "notes": "تثبيت Player+ تلقائياً، مفتاح الترجمة العربية قبل التشغيل، إرسال كل معلومات الفيلم للمشغّل."
+    "notes": "بند ظاهر في الشاشة الرئيسية لتنزيل وتثبيت مشغّل Player+، مع رسائل خطأ واضحة."
   },
   "player": {
     "versionCode": 2,
