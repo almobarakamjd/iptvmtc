@@ -1,14 +1,14 @@
 {
   "mytv": {
-    "versionCode": 4,
-    "versionName": "1.2.1",
+    "versionCode": 5,
+    "versionName": "1.3.0",
     "url": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/SmartTVPlus.apk",
-    "notes": "رقم الإصدار ظاهر في شاشة الاشتراكات والشاشة الرئيسية، مع إصدار Player+ المثبّت."
+    "notes": "توقيع بمفتاح إصدار ثابت (يقلل حظر Play Protect) + رقم الإصدار ظاهر."
   },
   "player": {
-    "versionCode": 3,
-    "versionName": "1.1.1",
+    "versionCode": 4,
+    "versionName": "1.2.0",
     "url": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/PlayerPlus.apk",
-    "notes": "رقم الإصدار في أسفل قائمة المشغّل."
+    "notes": "توقيع بمفتاح إصدار ثابت + رقم الإصدار في أسفل قائمة المشغّل."
   }
 }
