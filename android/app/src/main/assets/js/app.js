@@ -1138,7 +1138,7 @@
      واحدة فيُخرّب رسم النص على الأجهزة الضعيفة (نفس فئة مشكلة تجمّد مكتبة الـ177 ألف فيلم
      السابقة) — تقسيمها بالموسم يبقي كل شاشة بعدد حلقات معقول (عادة أقل من 30). */
   function openSeriesEpisodes(series, info) {
-    player.seriesMeta = titleMeta(info, series.name);
+    player.seriesMeta = titleMeta(info, series.name || series.title, series);
     var seasons = (info && info.episodes) || {};
     var seasonKeys = Object.keys(seasons).filter(function (s) { return (seasons[s] || []).length; })
       .sort(function (a, b) { return a - b; });
@@ -1324,7 +1324,7 @@
       }
     });
     show('screen-info');
-    $('info-title').textContent = item.name || '';
+    $('info-title').textContent = item.name || item.title || '';
     $('info-meta').textContent = '';
     $('info-plot').textContent = '';
     var poster = $('info-poster');
@@ -1346,10 +1346,18 @@
           renderActions(info);
         }]);
       }
+      if (effectivePlayer(kind === 'vod' ? 'movie' : 'series') === OUR_PLAYER) {
+        opts.push([function () {
+          return '🌐 ترجمة عربية تلقائية: ' + (Storage.getAutoSubtitles() ? 'تشغيل ✅' : 'إيقاف');
+        }, function () {
+          Storage.setAutoSubtitles(!Storage.getAutoSubtitles());
+          renderActions(info);
+        }]);
+      }
       if (kind === 'vod') {
         opts.push(['▶ تشغيل الفيلم', function () {
           Storage.addRecent(current.id, 'vod', item);
-          player.movieMeta = titleMeta(info, item.name);
+          player.movieMeta = titleMeta(info, item.name || item.title, item);
           playStream('movie', item.stream_id, item.container_extension, item.name);
         }]);
       } else {
@@ -1431,22 +1439,50 @@
     } catch (e) {}
   }
 
-  function titleMeta(info, fallbackName) {
+  /* كل ما يعرفه myTv+ عن العمل يُرسَل للمشغّل: الاسم (لا رقم الملف)، السنة، المدة، الامتداد،
+     رقم TMDB، القصة، النوع، الممثلون، المخرج، التقييم، الملصق — ليعرف الذكاء الاصطناعي عمّاذا يبحث */
+  function titleMeta(info, fallbackName, item) {
     var d = (info && info.info) || {};
-    var year = String(d.year || d.releasedate || d.releaseDate || d.release_date || '').slice(0, 4);
+    var md = (info && info.movie_data) || {};
+    item = item || {};
+    var year = String(d.year || d.releasedate || d.releaseDate || d.release_date || item.year || '').slice(0, 4);
+    var secs = parseInt(d.duration_secs, 10);
+    if (!secs && /^\d{1,2}:\d{2}:\d{2}$/.test(d.duration || '')) {
+      var p = d.duration.split(':').map(Number);
+      secs = p[0] * 3600 + p[1] * 60 + p[2];
+    }
     return {
-      tmdbId: String(d.tmdb_id || d.tmdb || ''),
+      name: String(fallbackName || md.name || d.name || ''),
+      tmdbId: String(d.tmdb_id || d.tmdb || item.tmdb || ''),
       imdbId: String(d.imdb_id || ''),
       year: /^\d{4}$/.test(year) ? year : '',
-      originalName: String(d.o_name || d.name || fallbackName || '')
+      originalName: String(d.o_name || d.name || fallbackName || ''),
+      durationSecs: secs || 0,
+      ext: String(md.container_extension || item.container_extension || ''),
+      plot: String(d.plot || d.description || ''),
+      genre: String(d.genre || ''),
+      cast: String(d.cast || d.actors || ''),
+      director: String(d.director || ''),
+      rating: String(d.rating || ''),
+      cover: String(d.cover_big || d.movie_image || d.cover || item.stream_icon || item.cover || '')
     };
   }
 
-  function sendToOurPlayer(items, index) {
+  function metaFields(meta) {
+    return {
+      tmdbId: meta.tmdbId || '', imdbId: meta.imdbId || '', year: meta.year || '',
+      originalName: meta.originalName || '', durationSecs: meta.durationSecs || 0, ext: meta.ext || '',
+      plot: meta.plot || '', genre: meta.genre || '', cast: meta.cast || '', director: meta.director || '',
+      rating: meta.rating || '', cover: meta.cover || ''
+    };
+  }
+
+  function sendToOurPlayer(items, index, autoSubtitles) {
     if (typeof AndroidOpen === 'undefined' || !AndroidOpen.playInPlayer) return false;
     var payload = {
       items: items,
       index: index,
+      autoSubtitles: !!autoSubtitles,
       xtream: { host: current.host, user: current.username, pass: current.password }
     };
     try { return AndroidOpen.playInPlayer(JSON.stringify(payload)); } catch (e) { return false; }
@@ -1472,34 +1508,35 @@
       return sendToOurPlayer(items, idx - from);
     }
     var meta = (kind === 'movie' ? player.movieMeta : player.seriesMeta) || {};
-    return sendToOurPlayer([{
-      url: Xtream.streamUrl(current, kind, id, ext),
-      title: name || '',
-      kind: kind,
-      streamId: String(id),
-      tmdbId: meta.tmdbId || '',
-      imdbId: meta.imdbId || '',
-      year: meta.year || '',
-      originalName: meta.originalName || ''
-    }], 0);
+    var it = metaFields(meta);
+    it.url = Xtream.streamUrl(current, kind, id, ext);
+    it.title = name || meta.name || meta.originalName || '';
+    it.kind = kind;
+    it.streamId = String(id);
+    if (!it.ext) it.ext = ext || '';
+    return sendToOurPlayer([it], 0, Storage.getAutoSubtitles());
   }
 
   function playSeriesInOurPlayer(series, allEps, idx) {
     var meta = player.seriesMeta || {};
+    var seriesName = series.name || meta.name || meta.originalName || '';
     var items = allEps.map(function (ep) {
-      return {
-        url: Xtream.streamUrl(current, 'series', ep.id, ep.container_extension),
-        title: (series.name + ' — م' + ep.season + ' ح' + ep.episode_num).replace(/[\r\n]/g, ' '),
-        kind: 'series',
-        streamId: String(ep.id),
-        season: Number(ep.season) || 0,
-        episode: Number(ep.episode_num) || 0,
-        tmdbId: meta.tmdbId || '',
-        year: meta.year || '',
-        originalName: meta.originalName || series.name || ''
-      };
+      var it = metaFields(meta);
+      var epInfo = ep.info || {};
+      it.url = Xtream.streamUrl(current, 'series', ep.id, ep.container_extension);
+      it.title = (seriesName + ' — م' + ep.season + ' ح' + ep.episode_num +
+        (ep.title && ep.title.indexOf(seriesName) < 0 ? ' — ' + ep.title : '')).replace(/[\r\n]/g, ' ');
+      it.kind = 'series';
+      it.streamId = String(ep.id);
+      it.season = Number(ep.season) || 0;
+      it.episode = Number(ep.episode_num) || 0;
+      it.originalName = meta.originalName || seriesName;
+      it.ext = ep.container_extension || '';
+      it.durationSecs = parseInt(epInfo.duration_secs, 10) || 0;
+      if (epInfo.plot) it.plot = String(epInfo.plot);
+      return it;
     });
-    return sendToOurPlayer(items, idx);
+    return sendToOurPlayer(items, idx, Storage.getAutoSubtitles());
   }
 
   /* ---------- المشغّل ----------
@@ -1843,6 +1880,14 @@
       actions.push(function () { cyclePreferredPlayer(k); });
     });
 
+    if (typeof AndroidSystem !== 'undefined' && AndroidSystem.checkUpdates) {
+      var ver = '';
+      try { ver = AndroidSystem.appVersion(); } catch (e) {}
+      var updEl = makeItem('🔄 التحقق من التحديثات وتثبيت Player+' + (ver ? ' <span class="sub">myTv+ ' + esc(ver) + '</span>' : ''));
+      box.appendChild(updEl); els.push(updEl);
+      actions.push(function () { AndroidSystem.checkUpdates(); });
+    }
+
     var pageSizeEl = makeItem('🔢 عدد البطاقات بالدفعة: <span class="sub">' + Storage.getPageSize() + '</span>');
     box.appendChild(pageSizeEl); els.push(pageSizeEl);
     actions.push(changePageSize);
@@ -1875,7 +1920,7 @@
   var PLAYER_CHOICES = ['', OUR_PLAYER, 'org.videolan.vlc', 'com.mxtech.videoplayer.ad'];
   var PLAYER_CHOICE_NAMES = {
     '': 'اسأل دائماً',
-    'com.oqod.movie_player': 'مشغّل myTv+',
+    'com.oqod.movie_player': 'Player+',
     'org.videolan.vlc': 'VLC',
     'com.mxtech.videoplayer.ad': 'MX Player'
   };

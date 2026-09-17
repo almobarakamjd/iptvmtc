@@ -29,6 +29,7 @@ import java.io.FileOutputStream;
 public class MainActivity extends Activity {
 
     private WebView web;
+    private UpdateManager updates;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -68,6 +69,10 @@ public class MainActivity extends Activity {
         hideSystemUi();
         web.requestFocus();
         web.loadUrl("file:///android_asset/index.html");
+
+        // تثبيت Player+ إن لم يكن مثبّتاً، وتحديث التطبيقين — بعد ظهور الواجهة بقليل
+        updates = new UpdateManager(this);
+        web.postDelayed(() -> updates.check(false), 4000);
     }
 
     /* إذن تخزين خارجي — لازم لحفظ رمز النسخة الاحتياطية بملف يبقى حتى بعد حذف/إعادة تثبيت
@@ -284,6 +289,17 @@ public class MainActivity extends Activity {
             });
         }
 
+        /** زر "التحقق من التحديثات" في إعدادات myTv+ */
+        @JavascriptInterface
+        public void checkUpdates() {
+            runOnUiThread(() -> { if (updates != null) updates.check(true); });
+        }
+
+        @JavascriptInterface
+        public String appVersion() {
+            return updates != null ? updates.versionName() : "";
+        }
+
         @JavascriptInterface
         public boolean isRemoteZapEnabled() {
             String enabled = Settings.Secure.getString(getContentResolver(),
@@ -340,6 +356,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (updates != null) updates.onResume();
         // يعيد رسم شاشة الإعدادات إن كانت مفتوحة — كي تتحدّث حالة "تبديل القنوات بالريموت"
         // فوراً بعد رجوع المستخدم من شاشة إتاحة أندرويد (تفعيل/تعطيل الخدمة يحصل هناك لا عندنا)
         if (web != null) web.evaluateJavascript("if(window.__onAndroidResume)window.__onAndroidResume();", null);

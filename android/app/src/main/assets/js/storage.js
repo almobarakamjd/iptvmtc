@@ -160,6 +160,15 @@ var Storage = (function () {
         localStorage.getItem(PLAYER_PREF_LEGACY_KEY) !== null;
     } catch (e) { return false; }
   }
+  /* مفتاح "ترجمة عربية تلقائية" في شاشة معلومات الفيلم/المسلسل — يتذكر آخر اختيار، متوقف افتراضياً
+     (قد يريد المشاهد العمل بلغته الأصلية بلا ترجمة) */
+  var AUTO_SUBS_KEY = 'aftv_auto_subtitles_v1';
+  function getAutoSubtitles() {
+    try { return localStorage.getItem(AUTO_SUBS_KEY) === '1'; } catch (e) { return false; }
+  }
+  function setAutoSubtitles(on) {
+    try { localStorage.setItem(AUTO_SUBS_KEY, on ? '1' : '0'); } catch (e) {}
+  }
   function setPreferredPlayer(kind, pkg) {
     try { localStorage.setItem(PLAYER_PREF_KEYS[kind] || PLAYER_PREF_KEYS.live, pkg || ''); } catch (e) {}
   }
@@ -278,6 +287,8 @@ var Storage = (function () {
     isInRecent: isInRecent,
     getPreferredPlayer: getPreferredPlayer,
     hasPreferredPlayer: hasPreferredPlayer,
+    getAutoSubtitles: getAutoSubtitles,
+    setAutoSubtitles: setAutoSubtitles,
     setPreferredPlayer: setPreferredPlayer,
     getPageSize: getPageSize,
     setPageSize: setPageSize,
