@@ -48,6 +48,12 @@
             android:exported="true"
             android:grantUriPermissions="true" />
 
+        <!-- يزود مشغّل Player+ ببيانات الفيلم (الاسم الحقيقي، السنة، TMDB) برقم البث عند الحاجة -->
+        <provider
+            android:name=".MetaProvider"
+            android:authorities="com.smarttvplus.iptvmtc.meta"
+            android:exported="true" />
+
         <!-- خدمة اختيارية يفعّلها المستخدم يدوياً من إعدادات أندرويد (شاشة "الإتاحة") لتحويل
              سهم فوق/تحت بالريموت إلى تبديل قناة تالية/سابقة أثناء التشغيل داخل VLC/MX -->
         <service

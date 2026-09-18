@@ -1376,6 +1376,14 @@
         opts.push(['▶ تشغيل الفيلم', function () {
           Storage.addRecent(current.id, 'vod', item);
           player.movieMeta = titleMeta(info, item.name || item.title, item);
+          if (typeof AndroidOpen !== 'undefined' && AndroidOpen.saveTitleMeta) {
+            var m = metaFields(player.movieMeta);
+            m.title = item.name || item.title || player.movieMeta.name || '';
+            m.originalName = player.movieMeta.originalName || m.title;
+            m.streamId = String(item.stream_id);
+            m.kind = 'movie';
+            AndroidOpen.saveTitleMeta(String(item.stream_id), JSON.stringify(m));
+          }
           playStream('movie', item.stream_id, item.container_extension, item.name);
         }]);
       } else {
@@ -1418,6 +1426,12 @@
       });
       $('info-plot').textContent = d.plot || d.description || '';
       if (!posterUrl && d.cover) { poster.src = d.cover; poster.style.visibility = 'visible'; }
+      if (kind === 'vod' && typeof AndroidOpen !== 'undefined' && AndroidOpen.saveTitleMeta) {
+        var m = titleMeta(info, item.name || item.title, item);
+        m.streamId = String(item.stream_id);
+        m.kind = 'movie';
+        AndroidOpen.saveTitleMeta(String(item.stream_id), JSON.stringify(m));
+      }
       renderActions(info);
       reportTitleToActorsDb(kind, item, d); // تسجيل عضوي لمشروع قاعدة بيانات الممثلين — انظر readme.md
     }, function () { loader(false); });
@@ -1431,8 +1445,7 @@
   var OUR_PLAYER = 'com.oqod.movie_player';
   var ourPlayerInstalledCache = null;
   function ourPlayerInstalled(fresh) {
-    if (fresh) ourPlayerInstalledCache = null; // بعد التثبيت مباشرة نحتاج قيمة محدّثة
-    if (ourPlayerInstalledCache === null) {
+    if (fresh || ourPlayerInstalledCache === null || ourPlayerInstalledCache === false) {
       try {
         ourPlayerInstalledCache = typeof AndroidOpen !== 'undefined' && !!AndroidOpen.isInstalled &&
           AndroidOpen.isInstalled(OUR_PLAYER);
@@ -1440,11 +1453,14 @@
     }
     return ourPlayerInstalledCache;
   }
-  /* المشغّل الفعلي لكل نوع: اختيار المستخدم إن وُجد، وإلا مشغّلنا إن كان مثبّتاً */
+  /* المشغّل الفعلي لكل نوع: إن كان مشغّلنا مثبتاً ولم يختر المستخدم صراحة VLC أو MX، فمشغّلنا هو الافتراضي */
   function effectivePlayer(kind) {
     migrateToOurPlayerOnce();
-    if (!Storage.hasPreferredPlayer(kind) && ourPlayerInstalled()) return OUR_PLAYER;
-    return Storage.getPreferredPlayer(kind);
+    var pref = Storage.getPreferredPlayer(kind);
+    if (ourPlayerInstalled() && pref !== 'org.videolan.vlc' && pref !== 'com.mxtech.videoplayer.ad') {
+      return OUR_PLAYER;
+    }
+    return pref;
   }
 
   /* مرة واحدة فقط عند أول تثبيت لمشغّلنا: نجعله المشغّل للقنوات والأفلام والمسلسلات حتى لو كان
@@ -1533,6 +1549,9 @@
     it.kind = kind;
     it.streamId = String(id);
     if (!it.ext) it.ext = ext || '';
+    if (typeof AndroidOpen !== 'undefined' && AndroidOpen.saveTitleMeta) {
+      AndroidOpen.saveTitleMeta(String(id), JSON.stringify(it));
+    }
     return sendToOurPlayer([it], 0, Storage.getAutoSubtitles());
   }
 
@@ -1553,6 +1572,9 @@
       it.ext = ep.container_extension || '';
       it.durationSecs = parseInt(epInfo.duration_secs, 10) || 0;
       if (epInfo.plot) it.plot = String(epInfo.plot);
+      if (typeof AndroidOpen !== 'undefined' && AndroidOpen.saveTitleMeta) {
+        AndroidOpen.saveTitleMeta(String(ep.id), JSON.stringify(it));
+      }
       return it;
     });
     return sendToOurPlayer(items, idx, Storage.getAutoSubtitles());

@@ -155,7 +155,11 @@ public class MainActivity extends Activity {
                 @Override public void run() {
                     Intent intent = new Intent(Intent.ACTION_VIEW);
                     intent.setDataAndType(Uri.parse(u), "video/*");
-                    if (pkg != null && pkg.length() > 0) intent.setPackage(pkg);
+                    String targetPkg = pkg;
+                    if ((targetPkg == null || targetPkg.length() == 0) && isInstalled("com.oqod.movie_player")) {
+                        targetPkg = "com.oqod.movie_player";
+                    }
+                    if (targetPkg != null && targetPkg.length() > 0) intent.setPackage(targetPkg);
                     addTitleExtras(intent, title);
                     try {
                         startActivity(intent);
@@ -182,6 +186,7 @@ public class MainActivity extends Activity {
             Intent intent = new Intent("com.oqod.movie_player.PLAY");
             intent.setPackage("com.oqod.movie_player");
             intent.putExtra("com.oqod.movie_player.PAYLOAD", payloadJson);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             try {
                 startActivity(intent);
                 return true;
@@ -192,6 +197,12 @@ public class MainActivity extends Activity {
                 Log.w("myTvPlus", "playInPlayer failed", e);
                 return false;
             }
+        }
+
+        @JavascriptInterface
+        public void saveTitleMeta(String streamId, String metaJson) {
+            if (streamId == null || metaJson == null) return;
+            MetaProvider.put(MainActivity.this, streamId, metaJson);
         }
 
         @JavascriptInterface
