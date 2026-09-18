@@ -26,7 +26,7 @@ import java.nio.charset.StandardCharsets;
  *   content://com.smarttvplus.iptvmtc.meta/item?streamId=2099842
  *   content://com.smarttvplus.iptvmtc.meta/item?url=http://host/movie/u/p/2099842.mkv
  *
- * الرد: صف واحد بعمود "json" فيه بيانات العمل. لا يحوي أي بيانات دخول للاشتراك.
+ * الرد: صف واحد بعمود "json" فيه بيانات العمل — بلا الرابط لأنه يحوي بيانات دخول الاشتراك.
  */
 public class MetaProvider extends ContentProvider {
     private static final String TAG = "MetaProvider";
@@ -39,7 +39,10 @@ public class MetaProvider extends ContentProvider {
         if (ctx == null || key == null || metaJson == null) return;
         try {
             JSONObject all = read(ctx);
-            all.put(key, new JSONObject(metaJson));
+            JSONObject meta = new JSONObject(metaJson);
+            // الموفّر مكشوف لكل تطبيقات الجهاز — والرابط يحوي اسم المستخدم وكلمة مرور الاشتراك
+            meta.remove("url");
+            all.put(key, meta);
             // نُبقي آخر المداخل فقط كي لا يكبر الملف بلا حدّ
             if (all.length() > MAX_ENTRIES) {
                 java.util.Iterator<String> it = all.keys();
@@ -89,6 +92,7 @@ public class MetaProvider extends ContentProvider {
         JSONObject all = read(ctx);
         JSONObject meta = all.optJSONObject(streamId);
         if (meta == null) return null;
+        meta.remove("url"); // مداخل حُفظت قبل 1.4.1 كانت تحوي الرابط ببيانات الدخول
         MatrixCursor c = new MatrixCursor(new String[]{"json"});
         c.addRow(new Object[]{meta.toString()});
         return c;
