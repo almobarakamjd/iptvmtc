@@ -41,6 +41,19 @@
             android:name=".InstallResultReceiver"
             android:exported="false" />
 
+        <!-- «مهيمن» الجهاز: يُعيَّن مرة واحدة عبر adb ليصير التحديث والتثبيت صامتاً (انظر README) -->
+        <receiver
+            android:name=".AdminReceiver"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:exported="true">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
         <!-- يسلّم ملف قائمة تشغيل M3U مؤقّت لتطبيق VLC/MX Player الخارجي (تبديل قنوات) -->
         <provider
             android:name=".PlaylistProvider"
