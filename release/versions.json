@@ -1,9 +1,9 @@
 {
   "mytv": {
-    "versionCode": 10,
-    "versionName": "1.5.2",
+    "versionCode": 13,
+    "versionName": "1.5.5",
     "url": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/SmartTVPlus.apk",
-    "notes": "قائمة «اخترنا لكم» (قنوات الخليج المختارة) أول قنوات الاشتراك الأول."
+    "notes": "«اخترنا لكم»: إرجاع قناة ذكريات وإضافة قناة العربية للأخبار."
   },
   "player": {
     "versionCode": 5,

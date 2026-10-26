@@ -515,48 +515,71 @@
       .replace(/\b(hd|fhd|uhd|sd|4k|8k|h265|hevc|backup|new|tv)\b/g, ' ')
       .replace(/\s+/g, ' ').trim();
   }
-  /* كل مدخل: c = الدولة (مع علم)، need = مجموعات كلمات (منطق AND بين المجموعات، OR داخل المجموعة) */
+  /* هل يحوي الاسم المطبَّع الكلمةَ؟ الكلمات اللاتينية/الأرقام تُطابَق بحدود كلمة (لئلا يطابق
+     sbc كلمة ssbc، أو ktv كلمة jaktv)؛ والعربية تُطابَق كجزء (لا حدود كلمة بسيطة بالعربية). */
+  function nameHas(n, kw) {
+    kw = normName(kw);
+    if (!kw) return false;
+    if (/^[a-z0-9 ]+$/.test(kw)) {
+      return new RegExp('(^| )' + kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '( |$)').test(n);
+    }
+    return n.indexOf(kw) >= 0;
+  }
+  /* كل مدخل: c = علم الدولة، need = مجموعات كلمات (AND بين المجموعات، OR داخلها)،
+     pref = كلمات الدولة لتفضيل قناتها الرئيسية عند تعدّد المطابقات */
+  var SA = ['saudi', 'ksa', 'السعوديه'], QA = ['qatar', 'قطر', 'qa'], JO = ['jordan', 'الاردن', 'jo'],
+      KWp = ['kuwait', 'الكويت', 'kuw'],
+      AE = ['uae', 'الامارات', 'ابوظبي', 'دبي', 'عجمان', 'الشارقه', 'abu dhabi', 'dubai', 'ajman', 'sharjah'];
   var GULF_PICKS = [
-    { c: '🇸🇦', need: [['ذكريات', 'zikrayat', 'zekrayat']] },
-    { c: '🇸🇦', need: [['الاخبارية', 'اخباريه', 'ekhbariya', 'ekhbaria']] },
-    { c: '🇸🇦', need: [['السعوديه', 'saudi', 'ksa'], ['24']] },
-    { c: '🇸🇦', need: [['sbc', 'اس بي سي']] },
-    { c: '🇸🇦', need: [['السعوديه', 'saudi', 'ksa'], ['الاولي', 'اولي', 'oula', 'oola', '1']] },
-    { c: '🇸🇦', need: [['قران', 'quran', 'qoran', 'koran'], ['السعوديه', 'saudi', 'ksa', 'مكه', 'makkah', 'makka']] },
-    { c: '🇸🇦', need: [['السنه', 'sunnah', 'sunna'], ['السعوديه', 'saudi', 'ksa', 'المدينه', 'نبويه', 'madina', 'medina']] },
-    { c: '🇶🇦', need: [['قطر', 'qatar'], ['قطر', 'qatar', '1']] },
-    { c: '🇶🇦', need: [['الريان', 'rayyan', 'alrayyan']] },
-    { c: '🇶🇦', need: [['الكاس', 'alkass', 'al kass', 'kass']] },
-    { c: '🇯🇴', need: [['المملكه', 'mamlaka', 'al mamlaka']] },
-    { c: '🇯🇴', need: [['الاردن', 'jordan', 'jrtv'], ['الاردن', 'jordan', '1']] },
-    { c: '🇯🇴', need: [['رويا', 'roya', 'rouya']] },
-    { c: '🇰🇼', need: [['الكويت', 'kuwait', 'ktv'], ['الكويت', 'kuwait', 'ktv', '1', 'الاولي', 'رئيسيه']] },
-    { c: '🇦🇪', need: [['ابوظبي', 'ابو ظبي', 'abu dhabi', 'abudhabi']] },
-    { c: '🇦🇪', need: [['دبي', 'dubai']] },
-    { c: '🇦🇪', need: [['عجمان', 'ajman']] },
-    { c: '🇦🇪', need: [['الشارقه', 'sharjah', 'sharjeh']] }
+    { c: '🇸🇦', need: [['ذكريات', 'zikrayat', 'zekrayat']], pref: SA },
+    { c: '🇸🇦', need: [['الاخبارية', 'اخباريه', 'ekhbariya', 'ekhbaria']], pref: SA },
+    // العربية للأخبار (طلب أبو فيصل) — نستبعد نسخ Business/برامج/الحدث
+    { c: '🇸🇦', need: [['al arabiya']], not: ['business', 'برامج', 'الحدث', 'hadath'], pref: SA },
+    { c: '🇸🇦', need: [['السعوديه', 'saudi', 'ksa'], ['24']], pref: SA },
+    { c: '🇸🇦', need: [['sbc', 'اس بي سي']], pref: SA },
+    // «الأولى» السعودية متوفّرة بنسخة 4K فقط في هذا الاشتراك
+    { c: '🇸🇦', need: [['saudi 1', 'السعوديه الاولي', 'saudiya', 'al saudiya']], pref: SA },
+    { c: '🇸🇦', need: [['قران', 'quran', 'qoran', 'koran'], ['السعوديه', 'saudi', 'ksa', 'مكه', 'makkah', 'makka']], pref: SA },
+    { c: '🇸🇦', need: [['السنه', 'sunnah', 'sunna'], ['السعوديه', 'saudi', 'ksa', 'المدينه', 'نبويه', 'madina', 'medina']], pref: SA },
+    { c: '🇶🇦', need: [['قطر', 'qatar'], ['قطر', 'qatar', '1']], pref: QA },
+    { c: '🇶🇦', need: [['الريان', 'rayyan']], pref: QA },
+    { c: '🇶🇦', need: [['الكاس', 'alkass', 'kass']], pref: QA },
+    { c: '🇯🇴', need: [['المملكه', 'mamlaka', 'almamlaka']], pref: JO },
+    { c: '🇯🇴', need: [['الاردن', 'jordan', 'jrtv'], ['الاردن', 'jordan', '1']], pref: JO },
+    { c: '🇯🇴', need: [['رويا', 'roya', 'rouya']], pref: JO },
+    { c: '🇰🇼', need: [['الكويت', 'kuwait', 'kuw'], ['ktv', '1', 'الاولي', 'رئيسيه', 'kuwait', 'الكويت']], pref: KWp },
+    { c: '🇦🇪', need: [['ابوظبي', 'ابو ظبي', 'abu dhabi', 'abudhabi']], pref: AE },
+    { c: '🇦🇪', need: [['دبي', 'dubai']], pref: AE },
+    { c: '🇦🇪', need: [['عجمان', 'ajman']], pref: AE },
+    { c: '🇦🇪', need: [['الشارقه', 'sharjah', 'sharjeh']], pref: AE }
   ];
   function pickGulfChannels(all) {
     var used = {}, out = [];
     GULF_PICKS.forEach(function (p) {
-      var best = null, bestLen = 1e9;
+      var cands = [];
       for (var i = 0; i < all.length; i++) {
         var ch = all[i];
         if (used[ch.stream_id]) continue;
         var n = normName(ch.name);
         if (!n) continue;
         var ok = p.need.every(function (group) {
-          return group.some(function (kw) { return n.indexOf(normName(kw)) >= 0; });
+          return group.some(function (kw) { return nameHas(n, kw); });
         });
-        if (ok && n.length < bestLen) { best = ch; bestLen = n.length; }
+        if (ok && p.not && p.not.some(function (kw) { return nameHas(n, kw); })) ok = false;  // كلمات استبعاد
+        if (ok) {
+          var prefMiss = p.pref.some(function (w) { return nameHas(n, w); }) ? 0 : 1;
+          var isReplay = /\bhours\b/i.test(ch.name) ? 1 : 0;      // قنوات الإعادة (… -6 HOURS) تُؤخَّر
+          var is4k = /\b(4k|8k|uhd)\b/i.test(ch.name) ? 1 : 0;    // نتجنّب نسخ 4K/8K (أثقل على هذا التلفاز)
+          cands.push({ ch: ch, rank: prefMiss * 1e6 + isReplay * 1e5 + is4k * 1e4 + n.length });
+        }
       }
-      if (best) {
-        used[best.stream_id] = 1;
-        // نسخة بعرض الاسم مسبوقاً بعلم الدولة (للتجميع البصري)؛ معرّف البث وبقية الحقول كما هي
-        var copy = {}; for (var k in best) copy[k] = best[k];
-        copy.name = p.c + ' ' + best.name;
-        out.push(copy);
-      }
+      if (!cands.length) return;
+      cands.sort(function (a, b) { return a.rank - b.rank; });
+      var best = cands[0].ch;
+      used[best.stream_id] = 1;
+      var copy = {}; for (var k in best) copy[k] = best[k];   // نسخة بالاسم مسبوقاً بعلم الدولة للتجميع البصري
+      copy.name = p.c + ' ' + best.name;
+      out.push(copy);
     });
     return out;
   }
