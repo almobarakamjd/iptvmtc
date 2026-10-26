@@ -6,3 +6,6 @@ android/local.properties
 glithes/
 *.srt
 server/actors-db/config.php
+
+# مفاتيح خدمات (لا تُدفع أبداً — المستودع عام)
+.env
