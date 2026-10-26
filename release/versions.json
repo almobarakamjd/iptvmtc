@@ -1,9 +1,9 @@
 {
   "mytv": {
-    "versionCode": 8,
-    "versionName": "1.5.0",
+    "versionCode": 10,
+    "versionName": "1.5.2",
     "url": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/SmartTVPlus.apk",
-    "notes": "دعم «المهيمن» (Device Owner): بعد تعيينه عبر adb يُثبَّت التحديث صامتاً بلا شاشة تثبيت."
+    "notes": "قائمة «اخترنا لكم» (قنوات الخليج المختارة) أول قنوات الاشتراك الأول."
   },
   "player": {
     "versionCode": 5,

@@ -501,6 +501,66 @@
     'p1': ['SAUDI ARABIA - السعودية', 'NEWS - أخبار', 'KIDS - أطفال']
   };
 
+  /* ---------- «اخترنا لكم» — قنوات الخليج المختارة (الاشتراك الأول فقط، طلب أبو فيصل 2026-10-26) ----------
+     بما أن أسماء القنوات تختلف من مزوّد لآخر، لا نخزّن معرّفات ثابتة بل نطابق الأسماء وقت التشغيل:
+     لكل قناة مطلوبة قائمة «need» من مجموعات كلمات — تُقبل القناة إن ورد من كل مجموعة كلمةٌ واحدة على
+     الأقل في اسمها (بعد التطبيع). عند تعدّد المطابقات نختار الأقصر اسماً (عادةً القناة الرئيسية لا الفرعية).
+     التعديل سهل: أضف/احذف مدخلاً أو كلمةً. القناة غير الموجودة تُتجاهَل بلا خطأ. */
+  function normName(s) {
+    return String(s == null ? '' : s)
+      .toLowerCase()
+      .replace(/[ً-ٰٟ]/g, '')          // تشكيل
+      .replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي')
+      .replace(/[|\-_•●.,:()\[\]"'’”“]/g, ' ')
+      .replace(/\b(hd|fhd|uhd|sd|4k|8k|h265|hevc|backup|new|tv)\b/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+  }
+  /* كل مدخل: c = الدولة (مع علم)، need = مجموعات كلمات (منطق AND بين المجموعات، OR داخل المجموعة) */
+  var GULF_PICKS = [
+    { c: '🇸🇦', need: [['ذكريات', 'zikrayat', 'zekrayat']] },
+    { c: '🇸🇦', need: [['الاخبارية', 'اخباريه', 'ekhbariya', 'ekhbaria']] },
+    { c: '🇸🇦', need: [['السعوديه', 'saudi', 'ksa'], ['24']] },
+    { c: '🇸🇦', need: [['sbc', 'اس بي سي']] },
+    { c: '🇸🇦', need: [['السعوديه', 'saudi', 'ksa'], ['الاولي', 'اولي', 'oula', 'oola', '1']] },
+    { c: '🇸🇦', need: [['قران', 'quran', 'qoran', 'koran'], ['السعوديه', 'saudi', 'ksa', 'مكه', 'makkah', 'makka']] },
+    { c: '🇸🇦', need: [['السنه', 'sunnah', 'sunna'], ['السعوديه', 'saudi', 'ksa', 'المدينه', 'نبويه', 'madina', 'medina']] },
+    { c: '🇶🇦', need: [['قطر', 'qatar'], ['قطر', 'qatar', '1']] },
+    { c: '🇶🇦', need: [['الريان', 'rayyan', 'alrayyan']] },
+    { c: '🇶🇦', need: [['الكاس', 'alkass', 'al kass', 'kass']] },
+    { c: '🇯🇴', need: [['المملكه', 'mamlaka', 'al mamlaka']] },
+    { c: '🇯🇴', need: [['الاردن', 'jordan', 'jrtv'], ['الاردن', 'jordan', '1']] },
+    { c: '🇯🇴', need: [['رويا', 'roya', 'rouya']] },
+    { c: '🇰🇼', need: [['الكويت', 'kuwait', 'ktv'], ['الكويت', 'kuwait', 'ktv', '1', 'الاولي', 'رئيسيه']] },
+    { c: '🇦🇪', need: [['ابوظبي', 'ابو ظبي', 'abu dhabi', 'abudhabi']] },
+    { c: '🇦🇪', need: [['دبي', 'dubai']] },
+    { c: '🇦🇪', need: [['عجمان', 'ajman']] },
+    { c: '🇦🇪', need: [['الشارقه', 'sharjah', 'sharjeh']] }
+  ];
+  function pickGulfChannels(all) {
+    var used = {}, out = [];
+    GULF_PICKS.forEach(function (p) {
+      var best = null, bestLen = 1e9;
+      for (var i = 0; i < all.length; i++) {
+        var ch = all[i];
+        if (used[ch.stream_id]) continue;
+        var n = normName(ch.name);
+        if (!n) continue;
+        var ok = p.need.every(function (group) {
+          return group.some(function (kw) { return n.indexOf(normName(kw)) >= 0; });
+        });
+        if (ok && n.length < bestLen) { best = ch; bestLen = n.length; }
+      }
+      if (best) {
+        used[best.stream_id] = 1;
+        // نسخة بعرض الاسم مسبوقاً بعلم الدولة (للتجميع البصري)؛ معرّف البث وبقية الحقول كما هي
+        var copy = {}; for (var k in best) copy[k] = best[k];
+        copy.name = p.c + ' ' + best.name;
+        out.push(copy);
+      }
+    });
+    return out;
+  }
+
   function addCatItem(box, c) {
     var n = browse.catCounts && browse.catCounts[c.category_id];
     var el = makeItem(esc(c.category_name) + (n ? ' <span class="sub">(' + n + ')</span>' : ''));
@@ -517,6 +577,13 @@
     browse.catEls = [];
     var ft = (filterText || '').trim().toLowerCase();
     var pinned = (!ft && browse.kind === 'live') ? (LIVE_CAT_PRIORITY[current.id] || []) : [];
+
+    /* «اخترنا لكم» — أول عنصر في قنوات الاشتراك الأول: مجموعة قنوات الخليج المختارة */
+    if (!ft && browse.kind === 'live' && current.id === 'p1') {
+      var curEl = makeItem('⭐ اخترنا لكم <span class="sub">(قنوات الخليج)</span>');
+      curEl._mode = 'curated';
+      box.appendChild(curEl); browse.catEls.push(curEl);
+    }
 
     /* أول تصنيف لقسمي الأفلام/المسلسلات: "الكل" — يعرض كل المحتوى بلا تصفية تصنيف */
     if (!ft && (browse.kind === 'vod' || browse.kind === 'series')) {
@@ -622,6 +689,23 @@
             browse.rawItems = list || [];
             renderItems(list, true);
           }, function (e) { loader(false); toast(e, 6000); });
+          return;
+        }
+        if (el._mode === 'curated') {
+          var ckey = current.id + ':live';
+          function showCurated(all) {
+            var picks = pickGulfChannels(all || []);
+            if (!picks.length) { toast('لم يُعثر على قنوات «اخترنا لكم» في هذا الاشتراك'); return; }
+            browse.rawItems = picks;
+            renderItems(picks, true);
+          }
+          if (searchCache[ckey]) { showCurated(searchCache[ckey]); }
+          else {
+            loader(true);
+            Xtream.allLive(current, function (list) {
+              loader(false); searchCache[ckey] = list || []; showCurated(list);
+            }, function (e) { loader(false); toast(e); });
+          }
           return;
         }
         if (el._mode === 'newlist') {
