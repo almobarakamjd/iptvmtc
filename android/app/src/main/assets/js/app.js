@@ -531,6 +531,9 @@
       KWp = ['kuwait', 'الكويت', 'kuw'],
       AE = ['uae', 'الامارات', 'ابوظبي', 'دبي', 'عجمان', 'الشارقه', 'abu dhabi', 'dubai', 'ajman', 'sharjah'];
   var GULF_PICKS = [
+    // قناة «ذكريات» المقصودة = KSA | Zkrayat HD (نستبعد نسخة Plus)
+    { c: '🇸🇦', need: [['zkrayat']], not: ['plus'], pref: SA },
+    // ويبقى «ذكريات الزمن القادم» أيضاً (طلب أبو فيصل: لا تحذفه)
     { c: '🇸🇦', need: [['ذكريات', 'zikrayat', 'zekrayat']], pref: SA },
     { c: '🇸🇦', need: [['الاخبارية', 'اخباريه', 'ekhbariya', 'ekhbaria']], pref: SA },
     // العربية للأخبار (طلب أبو فيصل) — نستبعد نسخ Business/برامج/الحدث
