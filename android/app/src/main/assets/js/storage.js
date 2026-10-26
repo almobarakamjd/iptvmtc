@@ -22,10 +22,10 @@ var Storage = (function () {
       },
       {
         id: 'p2',
-        name: 'World 8K',
-        host: 'http://cf.shop4uu.xyz',
-        username: 'e33b6eb4c485',
-        password: '4602631246',
+        name: 'الاشتراك الثاني',
+        host: 'http://36bra.site',   // متجر مواراو — بديل World 8K المنتهي (2026-10-26)
+        username: '295657081',
+        password: '5160122491',
         pinHash: hash('0000'),      // كلمة المرور الابتدائية 0000 — تُغيَّر من الإعدادات
         adultPinHash: hash('2135')  // إظهار المحتوى المحجوب (XXX) يتطلب 2135
       }
@@ -42,6 +42,13 @@ var Storage = (function () {
           list.forEach(function (p) {
             if (p.id === 'p2' && p.adultPinHash === undefined) p.adultPinHash = hash('2135');
             if (p.id === 'p1' && p.name === 'اشتراك أبو فيصل الأساسي') p.name = 'الاشتراك الأول';
+            // ترحيل 2026-10-26: اشتراك World 8K (cf.shop4uu.xyz) انتهى، استُبدل باشتراك متجر مواراو الجديد
+            if (p.host === 'http://cf.shop4uu.xyz') {
+              p.name = 'الاشتراك الثاني';
+              p.host = 'http://36bra.site';
+              p.username = '295657081';
+              p.password = '5160122491';
+            }
           });
           save(list);
           return list;
