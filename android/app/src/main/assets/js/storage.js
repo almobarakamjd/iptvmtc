@@ -236,6 +236,17 @@ var Storage = (function () {
     var all = loadLists();
     if (all[profileId]) { delete all[profileId][listId]; saveLists(all); }
   }
+  /* قائمة بمعرّف ثابت (مثل «اخترنا لكم» = picks) — تُنشأ مرة واحدة بمحتوى جاهز */
+  function hasCustomList(profileId, listId) {
+    var all = loadLists();
+    return !!(all[profileId] && all[profileId][listId]);
+  }
+  function setCustomList(profileId, listId, name, items) {
+    var all = loadLists();
+    if (!all[profileId]) all[profileId] = {};
+    all[profileId][listId] = { name: name, items: items || [] };
+    saveLists(all);
+  }
   function customListItems(profileId, listId) {
     var all = loadLists();
     return (all[profileId] && all[profileId][listId] && all[profileId][listId].items) || [];
@@ -308,6 +319,8 @@ var Storage = (function () {
     customListItems: customListItems,
     isInCustomList: isInCustomList,
     toggleCustomListItem: toggleCustomListItem,
+    hasCustomList: hasCustomList,
+    setCustomList: setCustomList,
     exportAll: exportAll,
     importAll: importAll
   };

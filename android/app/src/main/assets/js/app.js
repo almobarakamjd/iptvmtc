@@ -53,6 +53,7 @@
     focus.onEnter = onEnter;
     focus.cols = cols || 1;
     focus.onMove = null;
+    focus.keyHook = null;   // معالج أسهم خاص بالشاشة (مثل صف «القنوات | اخترنا لكم» في الرئيسية)
     paintFocus();
   }
 
@@ -289,12 +290,66 @@
       ]);
     }
     var menuEls = entries.map(function (e) { var el = makeItem(e[0]); box.appendChild(el); return el; });
+    var actions = entries.map(function (e) { return e[1]; });
+    /* «اخترنا لكم» (الاشتراك الأول): يسار «القنوات المباشرة» في نفس الصف — يُبلغ بالسهم الأيسر */
+    var hasPicks = current.id === 'p1';
+    if (hasPicks) {
+      var row = document.createElement('div');
+      row.className = 'home-row';
+      box.insertBefore(row, menuEls[0]);
+      row.appendChild(menuEls[0]);
+      var picksEl = makeItem('⭐ اخترنا لكم', 'home-picks');
+      row.appendChild(picksEl);
+      menuEls.splice(1, 0, picksEl);
+      actions.splice(1, 0, openPicks);
+    }
     // أيقونة تبديل الاشتراك أعلى الشاشة — تعيدنا لقائمة الاشتراكات دون الحاجة لاختياره كل مرة
     var switchBtn = $('switch-profile-btn');
     var els = [switchBtn].concat(menuEls);
-    var actions = [function () { showProfiles(); }].concat(entries.map(function (e) { return e[1]; }));
+    actions = [function () { showProfiles(); }].concat(actions);
     setFocusList(els, function (idx) { actions[idx](); });
+    if (hasPicks) {
+      // الترتيب: 0 تبديل، 1 القنوات، 2 اخترنا لكم (نفس الصف)، 3 الأفلام…
+      focus.keyHook = function (k) {
+        var to = -1;
+        if (k === 37 && focus.idx === 1) to = 2;        // يسار: من القنوات إلى «اخترنا لكم»
+        else if (k === 39 && focus.idx === 2) to = 1;   // يمين: رجوع للقنوات
+        else if (k === 40 && focus.idx === 1) to = 3;   // أسفل من القنوات: الأفلام (لا «اخترنا لكم»)
+        else if (k === 38 && focus.idx === 3) to = 1;   // أعلى من الأفلام: القنوات
+        else if (k === 38 && focus.idx === 2) to = 0;
+        if (to < 0) return false;
+        focus.idx = to; paintFocus();
+        return true;
+      };
+    }
     focus.idx = 1; paintFocus();
+  }
+
+  /* ---------- «اخترنا لكم»: قائمة محفوظة على الجهاز (Storage، معرّف ثابت picks) ----------
+     تُبنى مرة واحدة من قائمة القنوات الكاملة (GULF_PICKS)، ثم تُفتح فوراً بلا أي تحميل.
+     الإضافة تفتح منتقياً يقرأ كل القنوات، والحذف بالزر الأحمر أو «تحديد للحذف». */
+  var PICKS_ID = 'picks';
+
+  function withPicks(cb) {
+    if (Storage.hasCustomList(current.id, PICKS_ID)) { cb(Storage.customListItems(current.id, PICKS_ID)); return; }
+    var ck = current.id + ':live';
+    function seed(all) {
+      Storage.setCustomList(current.id, PICKS_ID, 'اخترنا لكم', pickGulfChannels(all || []));
+      cb(Storage.customListItems(current.id, PICKS_ID));
+    }
+    if (searchCache[ck]) { seed(searchCache[ck]); return; }
+    loader(true);
+    toast('تجهيز «اخترنا لكم» لأول مرة… (مرة واحدة فقط)', 6000);
+    Xtream.allLive(current, function (list) {
+      loader(false); searchCache[ck] = list || []; seed(list);
+    }, function (e) { loader(false); toast(e); });
+  }
+
+  function openPicks() {
+    withPicks(function (items) {
+      if (!items.length) toast('«اخترنا لكم» فارغة — استخدم «➕ أضف قنوات»');
+      openBrowse('live', '⭐ اخترنا لكم', items);
+    });
   }
 
   /* ---------- التصفح: بحث أعلى + تصنيفات + عناصر + معاينة ----------
@@ -306,7 +361,7 @@
     catMap: {}, rawCats: [], mode: 'normal', itemsLayoutCols: 1, searchIdx: 0, itemBarIdx: 0, catFilterText: '', itemFilterText: '', removeMode: false, selectedKeys: {}
   };
 
-  function openBrowse(kind, title) {
+  function openBrowse(kind, title, picks) {
     stopPreviewVideo();
     screenStack.push(homeScreen);
     browse = {
@@ -322,7 +377,14 @@
     $('search-content-box').textContent = '🔍 بحث بالتصفية…';
     $('search-cats-box').textContent = '🔎 بحث في التصنيفات…';
     $('search-items-box').textContent = '🔍 بحث في هذا القسم…';
-    loader(true);
+    // «اخترنا لكم» من الشاشة الرئيسية: نعرض القنوات فوراً، والتصنيفات تصل بالخلفية دون أن تسرق التركيز
+    var quick = !!(picks && picks.length);
+    if (quick) {
+      browse.mode = 'customView'; browse.customListId = PICKS_ID;
+      resetItemSearchBox();
+      browse.rawItems = picks;
+      renderItems(picks, true);
+    } else loader(true);
     var fn = kind === 'live' ? Xtream.liveCategories : kind === 'vod' ? Xtream.vodCategories : Xtream.seriesCategories;
     fn(current, function (cats) {
       loader(false);
@@ -332,9 +394,9 @@
       browse.rawCats.forEach(function (c) { browse.catMap[c.category_id] = c.category_name || ''; });
       renderCatsList('');
       if (!browse.catEls.length) { toast('لا توجد تصنيفات'); back(); return; }
-      focusCats();
+      if (!quick) focusCats();
       loadCatCounts(kind);
-    }, function (e) { loader(false); toast(e); back(); });
+    }, function (e) { loader(false); if (!quick) { toast(e); back(); } });
   }
 
   /* يجلب كل مواد القسم مرة واحدة لحساب عدد المواد بكل تصنيف — ويُخزَّن بذاكرة الجلسة
@@ -609,6 +671,9 @@
       var curEl = makeItem('⭐ اخترنا لكم <span class="sub">(قنوات الخليج)</span>');
       curEl._mode = 'curated';
       box.appendChild(curEl); browse.catEls.push(curEl);
+      var addPicksEl = makeItem('➕ أضف قنوات لـ«اخترنا لكم»');
+      addPicksEl._mode = 'customAdd'; addPicksEl._listId = PICKS_ID;
+      box.appendChild(addPicksEl); browse.catEls.push(addPicksEl);
     }
 
     /* أول تصنيف لقسمي الأفلام/المسلسلات: "الكل" — يعرض كل المحتوى بلا تصفية تصنيف */
@@ -640,7 +705,7 @@
 
     /* قوائم مخصّصة للقنوات المباشرة فقط — كل قائمة بشاشتها الخاصة (عرض) + خيار إضافة قنوات إليها */
     if (!ft && browse.kind === 'live') {
-      Storage.listAllCustom(current.id).forEach(function (l) {
+      Storage.listAllCustom(current.id).filter(function (l) { return l.id !== PICKS_ID; }).forEach(function (l) {
         var n = Storage.customListItems(current.id, l.id).length;
         var viewEl = makeItem('☰ ' + esc(l.name) + (n ? ' <span class="sub">(' + n + ')</span>' : ''));
         viewEl._mode = 'customView'; viewEl._listId = l.id;
@@ -718,20 +783,13 @@
           return;
         }
         if (el._mode === 'curated') {
-          var ckey = current.id + ':live';
-          function showCurated(all) {
-            var picks = pickGulfChannels(all || []);
-            if (!picks.length) { toast('لم يُعثر على قنوات «اخترنا لكم» في هذا الاشتراك'); return; }
-            browse.rawItems = picks;
-            renderItems(picks, true);
-          }
-          if (searchCache[ckey]) { showCurated(searchCache[ckey]); }
-          else {
-            loader(true);
-            Xtream.allLive(current, function (list) {
-              loader(false); searchCache[ckey] = list || []; showCurated(list);
-            }, function (e) { loader(false); toast(e); });
-          }
+          withPicks(function (items) {
+            browse.mode = 'customView'; browse.customListId = PICKS_ID;
+            resetItemSearchBox();
+            if (!items.length) { toast('«اخترنا لكم» فارغة — استخدم «➕ أضف قنوات»'); return; }
+            browse.rawItems = items;
+            renderItems(items, true);
+          });
           return;
         }
         if (el._mode === 'newlist') {
@@ -756,6 +814,8 @@
           browse.mode = 'customPick';
           var pkey = current.id + ':live';
           function showPicker(list) {
+            if (el._listId === PICKS_ID && !Storage.hasCustomList(current.id, PICKS_ID))
+              Storage.setCustomList(current.id, PICKS_ID, 'اخترنا لكم', pickGulfChannels(list || []));
             browse.rawItems = list || [];
             renderItems(list, true);
             toast('موافق: إضافة/إزالة من القائمة — رجوع للخروج');
@@ -2412,6 +2472,7 @@
       return;
     }
 
+    if (focus.keyHook && focus.keyHook(k)) { ev.preventDefault(); return; }
     switch (k) {
       case 38: ev.preventDefault(); moveFocus(-focus.cols); break;          // أعلى
       case 40: ev.preventDefault(); moveFocus(focus.cols); break;           // أسفل

@@ -42,6 +42,10 @@ body.in-player, body.in-player .screen, body.in-player #html5-player {
                      يمرّر الحاوية تلقائياً (scrollIntoView) فلا حاجة لضغط الارتفاعات */
 }
 .v-list.big .item { font-size: 46px; padding: 28px 44px; }
+/* صف «القنوات المباشرة | اخترنا لكم» في الرئيسية — RTL: الأول يميناً والثاني يساراً */
+.home-row { display: flex; gap: 14px; }
+.home-row .item { flex: 1; }
+.home-row .item.home-picks { flex: 0 0 34%; }
 .item.focused { background: #2e6fd8; color: #fff; transform: scale(1.02); }
 .item .sub { font-size: 24px; color: #9fb4d8; display: block; }
 .item.focused .sub { color: #dce9ff; }
