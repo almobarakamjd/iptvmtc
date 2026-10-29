@@ -6,6 +6,7 @@
    - تعديل بلا اتصال يبقى معلَّماً «لم يُرفع» ويُرفع قبل أي جلب لاحق، فلا تمحوه نسخة الخادم. */
 var UserSync = (function () {
   var BASE = 'https://amjd.law/apps/ipv/user_data.php';
+  var PROGRESS = 'https://amjd.law/apps/ipv/progress.php';
   var TOKEN = 'mytvplus_owner_Vb8rT3qK6wNz';
   var DIRTY_KEY = 'aftv_owner_dirty_v1';
   var timers = {};
@@ -78,6 +79,20 @@ var UserSync = (function () {
 
   return {
     active: active,
+    /* بيانات المزامنة التي تُرسل مع كل تشغيل إلى Player+ ليرفع موضع التوقف */
+    playerSync: function (sub) { return active() ? { url: PROGRESS, token: TOKEN, sub: sub } : null; },
+    /* مواضع حلقات مسلسل من الخادم: onDone({streamId: {pos_ms, dur_ms, done, season, episode, at}}) — فارغ للضيف أو عند الخطأ */
+    seriesProgress: function (sub, seriesId, onDone) {
+      if (!active()) { onDone({}); return; }
+      fetch(PROGRESS + '?token=' + encodeURIComponent(TOKEN) + '&sub=' + encodeURIComponent(sub) +
+        '&series_id=' + encodeURIComponent(seriesId))
+        .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function (res) {
+          var map = {};
+          ((res && res.items) || []).forEach(function (x) { map[String(x.stream_id)] = x; });
+          onDone(map);
+        }).catch(function () { onDone({}); });
+    },
     enter: function (onDone, onError) { Storage.setUser('owner'); pull(onDone, onError); },
     leave: function () { pushDirty().catch(function () {}); Storage.setUser('guest'); },
     pull: pull,

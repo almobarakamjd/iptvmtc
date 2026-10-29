@@ -1,14 +1,14 @@
 {
   "mytv": {
-    "versionCode": 15,
-    "versionName": "1.6.0",
+    "versionCode": 16,
+    "versionName": "1.7.0",
     "url": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/SmartTVPlus.apk",
-    "notes": "«اخترنا لكم» في الشاشة الرئيسية يسار القنوات: يفتح فوراً، مع إضافة القنوات وحذفها."
+    "notes": "تحسينات في شاشة المواسم والحلقات وإصلاحات عامة."
   },
   "player": {
-    "versionCode": 6,
-    "versionName": "1.3.1",
+    "versionCode": 7,
+    "versionName": "1.4.0",
     "url": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/PlayerPlus.apk",
-    "notes": "إصلاح بحث الترجمة: الواجهة الرسمية لموقع SubDL بمفتاح مضمَّن (كان الموقع يحجب التنزيل)."
+    "notes": "تحسينات في متابعة المشاهدة."
   }
 }

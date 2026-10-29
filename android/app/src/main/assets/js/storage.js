@@ -280,6 +280,23 @@ var Storage = (function () {
     return added;
   }
 
+  /* آخر حلقة اختيرت لكل مسلسل: {profileId: {seriesId: {id, season, episode, at}}} — تُزامَن للمستخدم المخفي
+     (والمواضع الدقيقة والحلقات المكتملة يرفعها Player+ إلى progress.php) */
+  var EPISODES_KEY = 'aftv_episodes_v1';
+  function loadEpisodes() {
+    try { return JSON.parse(localStorage.getItem(ukey(EPISODES_KEY))) || {}; } catch (e) { return {}; }
+  }
+  function lastEpisode(profileId, seriesId) {
+    return (loadEpisodes()[profileId] || {})[String(seriesId)] || null;
+  }
+  function setLastEpisode(profileId, seriesId, ep) {
+    var all = loadEpisodes();
+    if (!all[profileId]) all[profileId] = {};
+    all[profileId][String(seriesId)] = { id: String(ep.id), season: Number(ep.season) || 0, episode: Number(ep.episode_num) || 0, at: Date.now() };
+    localStorage.setItem(ukey(EPISODES_KEY), JSON.stringify(all));
+    changed('episodes');
+  }
+
   /* تصدير/استيراد كل بيانات التطبيق دفعة واحدة — للنسخ الاحتياطي السحابي (انظر cloud.js) */
   function exportAll() {
     return {
@@ -301,7 +318,7 @@ var Storage = (function () {
 
   /* بيانات المستخدم الخام (نص JSON) لكل حقل — للمزامنة: rawField يقرأ، setRawField يكتب بلا
      إطلاق changeHook (ما يأتي من الخادم لا يُعاد رفعه). guestRaw يقرأ بيانات الضيف للبذرة الأولى. */
-  var FIELD_KEYS = { favs: FAV_KEY, recent: RECENT_KEY, lists: LISTS_KEY };
+  var FIELD_KEYS = { favs: FAV_KEY, recent: RECENT_KEY, lists: LISTS_KEY, episodes: EPISODES_KEY };
   function rawField(field) { return localStorage.getItem(ukey(FIELD_KEYS[field])); }
   function setRawField(field, json) { localStorage.setItem(ukey(FIELD_KEYS[field]), json); }
   function guestRaw(field) { return localStorage.getItem(FIELD_KEYS[field]); }
@@ -339,6 +356,8 @@ var Storage = (function () {
     toggleCustomListItem: toggleCustomListItem,
     hasCustomList: hasCustomList,
     setCustomList: setCustomList,
+    lastEpisode: lastEpisode,
+    setLastEpisode: setLastEpisode,
     exportAll: exportAll,
     importAll: importAll,
     getUser: function () { return user; },

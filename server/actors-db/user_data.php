@@ -8,7 +8,7 @@
 require __DIR__ . '/config.php';
 header('Content-Type: application/json; charset=utf-8');
 
-$FIELDS = ['favs', 'recent', 'lists'];
+$FIELDS = ['favs', 'recent', 'lists', 'episodes'];
 $USER = 'owner';
 
 $data = null;

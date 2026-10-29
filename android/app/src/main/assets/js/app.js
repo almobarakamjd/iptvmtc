@@ -1367,8 +1367,45 @@
         .forEach(function (ep) { allEps.push(ep); });
     });
     screenStack.push(function () { openInfo('series', series); });
-    if (seasonKeys.length > 1) renderSeasonsList(series, seasons, seasonKeys, allEps);
-    else renderEpisodesList(series, seasons, seasonKeys[0], seasonKeys, allEps);
+    // مواضع الحلقات من الخادم (للمستخدم المخفي فقط؛ الضيف يأخذ {} فوراً)
+    loader(true);
+    UserSync.seriesProgress(current.id, series.series_id, function (prog) {
+      loader(false);
+      epState = { prog: prog, last: lastWatchedEpisode(series, prog) };
+      if (seasonKeys.length > 1) renderSeasonsList(series, seasons, seasonKeys, allEps);
+      else renderEpisodesList(series, seasons, seasonKeys[0], seasonKeys, allEps);
+    });
+  }
+
+  /* حالة حلقات المسلسل المفتوح: prog = مواضع Player+ من الخادم، last = آخر حلقة شوهدت {id, season} */
+  var epState = { prog: {}, last: null };
+
+  /* آخر حلقة: الأحدث بين ما اختير في myTv+ (Storage) وما رفعه Player+ (قد ينتقل للحلقة التالية وحده) */
+  function lastWatchedEpisode(series, prog) {
+    var best = Storage.lastEpisode(current.id, series.series_id);
+    var bestAt = best ? best.at : 0;
+    Object.keys(prog).forEach(function (id) {
+      var at = (prog[id].at || 0) * 1000;
+      if (at > bestAt) { bestAt = at; best = { id: id, season: prog[id].season, episode: prog[id].episode }; }
+    });
+    return best;
+  }
+
+  function fmtPos(ms) {
+    var t = Math.floor(ms / 1000), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = t % 60;
+    function two(n) { return (n < 10 ? '0' : '') + n; }
+    return (h ? h + ':' + two(m) : m) + ':' + two(sec);
+  }
+
+  /* علامة الحلقة: ✓ شوهدت، ⏸ موضع التوقف (ساعات:دقائق:ثوانٍ)، ▶ آخر حلقة */
+  function episodeMark(ep) {
+    var p = epState.prog[String(ep.id)];
+    var isLast = epState.last && String(epState.last.id) === String(ep.id);
+    var bits = [];
+    if (isLast) bits.push('▶ آخر مشاهدة');
+    if (p && p.done) bits.push('✓ شوهدت');
+    else if (p && p.pos_ms > 0) bits.push('⏸ ' + fmtPos(p.pos_ms));
+    return bits.length ? ' <span class="sub">' + bits.join(' · ') + '</span>' : '';
   }
 
   function renderSeasonsList(series, seasons, seasonKeys, allEps) {
@@ -1376,15 +1413,36 @@
     $('series-title').textContent = series.name;
     var box = $('episodes-list');
     box.innerHTML = '';
-    var els = seasonKeys.map(function (s) {
+    epState.series = series;
+    epState.rerender = function () { renderSeasonsList(series, seasons, seasonKeys, allEps); };
+    var lastIdx = -1;
+    var els = seasonKeys.map(function (s, i) {
+      var doneN = seasons[s].filter(function (ep) { var p = epState.prog[String(ep.id)]; return p && p.done; }).length;
+      var hasLast = epState.last && seasons[s].some(function (ep) { return String(ep.id) === String(epState.last.id); });
+      if (hasLast) lastIdx = i;
       var el = makeItem('📀 الموسم ' + esc(s) +
-        ' <span class="sub">' + seasons[s].length + ' حلقة</span>');
+        ' <span class="sub">' + seasons[s].length + ' حلقة' +
+        (doneN ? ' · ✓ ' + doneN + ' شوهدت' : '') +
+        (hasLast ? ' · ▶ آخر مشاهدة: الحلقة ' + esc(epState.last.episode) : '') + '</span>');
       box.appendChild(el);
       return el;
     });
     setFocusList(els, function (idx) {
       screenStack.push(function () { renderSeasonsList(series, seasons, seasonKeys, allEps); });
       renderEpisodesList(series, seasons, seasonKeys[idx], seasonKeys, allEps);
+    });
+    if (lastIdx > 0) { focus.idx = lastIdx; paintFocus(); }
+  }
+
+  /* بعد الرجوع من Player+ إلى شاشة الحلقات: مواضع جديدة (وربما انتقل وحده لحلقة تالية) */
+  function refreshEpisodeMarks() {
+    if ($('screen-series').classList.contains('hidden') || !epState.series || !epState.rerender) return;
+    var series = epState.series, rerender = epState.rerender;
+    UserSync.seriesProgress(current.id, series.series_id, function (prog) {
+      if (epState.series !== series || $('screen-series').classList.contains('hidden')) return;
+      epState.prog = prog;
+      epState.last = lastWatchedEpisode(series, prog);
+      rerender();
     });
   }
 
@@ -1398,18 +1456,25 @@
       return (Number(a.episode_num) || 0) - (Number(b.episode_num) || 0);
     });
     if (!eps.length) { toast('لا توجد حلقات'); back(); return; }
-    var els = eps.map(function (ep) {
+    epState.series = series;
+    epState.rerender = function () { renderEpisodesList(series, seasons, seasonKey, seasonKeys, allEps); };
+    var lastIdx = -1;
+    var els = eps.map(function (ep, i) {
+      if (epState.last && String(epState.last.id) === String(ep.id)) lastIdx = i;
       var el = makeItem('الحلقة ' + esc(ep.episode_num) +
-        (ep.title ? ' <span class="sub">' + esc(ep.title) + '</span>' : ''));
+        (ep.title ? ' <span class="sub">' + esc(ep.title) + '</span>' : '') + episodeMark(ep));
       box.appendChild(el);
       return el;
     });
     setFocusList(els, function (idx) {
       Storage.addRecent(current.id, 'series', series);
       var ep = eps[idx];
+      Storage.setLastEpisode(current.id, series.series_id, ep);
+      epState.last = { id: String(ep.id), season: ep.season, episode: ep.episode_num };
       var allIdx = allEps.indexOf(ep);
       playSeriesEpisode(series, allEps, allIdx === -1 ? 0 : allIdx);
     });
+    if (lastIdx > 0) { focus.idx = lastIdx; paintFocus(); }
   }
 
   /* تشغيل حلقة: نسلّم المشغّل الخارجي (VLC/MX) قائمة تشغيل M3U بكل حلقات المسلسل من كل
@@ -1718,6 +1783,8 @@
       autoSubtitles: !!autoSubtitles,
       xtream: { host: current.host, user: current.username, pass: current.password }
     };
+    var sync = UserSync.playerSync(current.id);
+    if (sync) payload.sync = sync;
     try { return AndroidOpen.playInPlayer(JSON.stringify(payload)); } catch (e) { return false; }
   }
 
@@ -1764,6 +1831,7 @@
         (ep.title && ep.title.indexOf(seriesName) < 0 ? ' — ' + ep.title : '')).replace(/[\r\n]/g, ' ');
       it.kind = 'series';
       it.streamId = String(ep.id);
+      it.seriesId = String(series.series_id || '');
       it.season = Number(ep.season) || 0;
       it.episode = Number(ep.episode_num) || 0;
       it.originalName = meta.originalName || seriesName;
@@ -2531,6 +2599,7 @@
   window.__onAndroidResume = function () {
     var s = $('screen-settings');
     if (s && !s.classList.contains('hidden')) renderSettings();
+    refreshEpisodeMarks();
     UserSync.refresh(function () { if (!$('screen-home').classList.contains('hidden')) homeScreen(); });
   };
 })();
