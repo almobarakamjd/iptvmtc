@@ -13,8 +13,8 @@ android {
         applicationId 'com.smarttvplus.iptvmtc'
         minSdk 21          // أندرويد 5.0 فأعلى — يغطي أجهزة MTC والبوكسات القديمة
         targetSdk 34
-        versionCode 15
-        versionName '1.6.0'
+        versionCode 16
+        versionName '1.7.0'
     }
 
     signingConfigs {

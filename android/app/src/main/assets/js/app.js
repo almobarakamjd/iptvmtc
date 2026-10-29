@@ -254,7 +254,9 @@
 
   function homeScreen() {
     show('screen-home');
-    $('home-title').textContent = current.name + '  ·  ' + appVersionText();
+    // النقطة الصغيرة آخر العنوان: الوحيدة الدالة على مستخدم أبي فيصل المخفي
+    $('home-title').textContent = current.name + '  ·  ' + appVersionText() + (UserSync.active() ? '  •' : '');
+    UserSync.refresh(function () { if (!$('screen-home').classList.contains('hidden')) homeScreen(); });
     var box = $('home-menu');
     box.innerHTML = '';
     var entries = [
@@ -293,6 +295,7 @@
     var actions = entries.map(function (e) { return e[1]; });
     /* «اخترنا لكم» (الاشتراك الأول): يسار «القنوات المباشرة» في نفس الصف — يُبلغ بالسهم الأيسر */
     var hasPicks = current.id === 'p1';
+    var seriesEl = menuEls[2];
     if (hasPicks) {
       var row = document.createElement('div');
       row.className = 'home-row';
@@ -321,8 +324,33 @@
         focus.idx = to; paintFocus();
         return true;
       };
+      /* مستخدم أبي فيصل المخفي: على «المسلسلات» يمين، يمين، يسار — دخولاً أو خروجاً */
+      var seriesIdx = els.indexOf(seriesEl), picksHook = focus.keyHook, seq = [];
+      focus.keyHook = function (k) {
+        if (focus.idx === seriesIdx && (k === 37 || k === 39)) {
+          seq.push(k);
+          if (seq.length > 3) seq.shift();
+          if (seq.join(',') === '39,39,37') { seq = []; toggleOwner(seriesIdx); }
+          return true;
+        }
+        seq = [];
+        return picksHook(k);
+      };
     }
     focus.idx = 1; paintFocus();
+  }
+
+  function toggleOwner(keepIdx) {
+    function done(msg) {
+      loader(false);
+      toast(msg);
+      homeScreen();
+      focus.idx = keepIdx; paintFocus();
+    }
+    if (UserSync.active()) { UserSync.leave(); done('تم ✓'); return; }
+    loader(true);
+    UserSync.enter(function () { done('تم ✓'); },
+      function (e) { done('تم ✓ — تعذّرت المزامنة: ' + e); });
   }
 
   /* ---------- «اخترنا لكم»: قائمة محفوظة على الجهاز (Storage، معرّف ثابت picks) ----------
@@ -1466,7 +1494,7 @@
       };
       var xhr = new XMLHttpRequest();
       xhr.open('POST', ACTORS_API_BASE + 'ingest.php', true);
-      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.setRequestHeader('Content-Type', 'text/plain');  // يتجنب طلب OPTIONS المسبق من file://
       xhr.send(JSON.stringify(payload));
     } catch (e) { /* تجاهل — تسجيل ثانوي غير حرج */ }
   }
@@ -2503,5 +2531,6 @@
   window.__onAndroidResume = function () {
     var s = $('screen-settings');
     if (s && !s.classList.contains('hidden')) renderSettings();
+    UserSync.refresh(function () { if (!$('screen-home').classList.contains('hidden')) homeScreen(); });
   };
 })();

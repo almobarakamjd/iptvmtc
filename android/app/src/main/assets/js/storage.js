@@ -64,11 +64,19 @@ var Storage = (function () {
     localStorage.setItem(KEY, JSON.stringify(list));
   }
 
+  /* المستخدم الحالي: «guest» افتراضياً (بياناته على الجهاز فقط، بالمفاتيح القديمة نفسها)،
+     و«owner» مستخدم أبي فيصل المخفي: مفاتيح منفصلة على الجهاز تُزامَن مع الخادم (usersync.js).
+     لا يُحفظ اختيار المستخدم — كل تشغيل للتطبيق يبدأ ضيفاً. */
+  var user = 'guest';
+  function ukey(base) { return user === 'guest' ? base : base.replace('aftv_', 'aftv_' + user + '_'); }
+  var changeHook = null;   // يُنادى بعد كل تعديل على بيانات المستخدم (field = favs/recent/lists)
+  function changed(field) { if (changeHook) try { changeHook(field); } catch (e) {} }
+
   /* المفضلة: لكل اشتراك ولكل قسم قائمة عناصر محفوظة كاملة */
   var FAV_KEY = 'aftv_favs_v1';
 
   function loadFavs() {
-    try { return JSON.parse(localStorage.getItem(FAV_KEY)) || {}; } catch (e) { return {}; }
+    try { return JSON.parse(localStorage.getItem(ukey(FAV_KEY))) || {}; } catch (e) { return {}; }
   }
 
   function favList(profileId, kind) {
@@ -94,7 +102,8 @@ var Storage = (function () {
     var added;
     if (idx >= 0) { list.splice(idx, 1); added = false; }
     else { list.unshift(it); added = true; }
-    localStorage.setItem(FAV_KEY, JSON.stringify(all));
+    localStorage.setItem(ukey(FAV_KEY), JSON.stringify(all));
+    changed('favs');
     return added;
   }
 
@@ -102,7 +111,7 @@ var Storage = (function () {
   var RECENT_KEY = 'aftv_recent_v1';
 
   function loadRecents() {
-    try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || {}; } catch (e) { return {}; }
+    try { return JSON.parse(localStorage.getItem(ukey(RECENT_KEY))) || {}; } catch (e) { return {}; }
   }
 
   function recentList(profileId, kind) {
@@ -120,7 +129,8 @@ var Storage = (function () {
       if (favKeyOf(kind, list[i]) === k) list.splice(i, 1);
     list.unshift(it);
     if (list.length > 50) list.length = 50;
-    localStorage.setItem(RECENT_KEY, JSON.stringify(all));
+    localStorage.setItem(ukey(RECENT_KEY), JSON.stringify(all));
+    changed('recent');
   }
 
   function removeRecent(profileId, kind, it) {
@@ -129,7 +139,8 @@ var Storage = (function () {
     var k = favKeyOf(kind, it);
     for (var i = list.length - 1; i >= 0; i--)
       if (favKeyOf(kind, list[i]) === k) list.splice(i, 1);
-    localStorage.setItem(RECENT_KEY, JSON.stringify(all));
+    localStorage.setItem(ukey(RECENT_KEY), JSON.stringify(all));
+    changed('recent');
   }
 
   function isInRecent(profileId, kind, it) {
@@ -212,9 +223,9 @@ var Storage = (function () {
   /* قوائم مخصّصة للقنوات المباشرة فقط — منفصلة عن المفضلة، بأسماء ينشئها المستخدم */
   var LISTS_KEY = 'aftv_customlists_v1';
   function loadLists() {
-    try { return JSON.parse(localStorage.getItem(LISTS_KEY)) || {}; } catch (e) { return {}; }
+    try { return JSON.parse(localStorage.getItem(ukey(LISTS_KEY))) || {}; } catch (e) { return {}; }
   }
-  function saveLists(all) { localStorage.setItem(LISTS_KEY, JSON.stringify(all)); }
+  function saveLists(all) { localStorage.setItem(ukey(LISTS_KEY), JSON.stringify(all)); changed('lists'); }
 
   function listAllCustom(profileId) {
     var all = loadLists()[profileId] || {};
@@ -273,20 +284,27 @@ var Storage = (function () {
   function exportAll() {
     return {
       profiles: localStorage.getItem(KEY),
-      favs: localStorage.getItem(FAV_KEY),
-      recent: localStorage.getItem(RECENT_KEY),
+      favs: localStorage.getItem(ukey(FAV_KEY)),
+      recent: localStorage.getItem(ukey(RECENT_KEY)),
       lastProfile: localStorage.getItem(LAST_KEY),
-      lists: localStorage.getItem(LISTS_KEY)
+      lists: localStorage.getItem(ukey(LISTS_KEY))
     };
   }
   function importAll(data) {
     if (!data) return;
     if (data.profiles) localStorage.setItem(KEY, data.profiles);
-    if (data.favs) localStorage.setItem(FAV_KEY, data.favs);
-    if (data.recent) localStorage.setItem(RECENT_KEY, data.recent);
+    if (data.favs) { localStorage.setItem(ukey(FAV_KEY), data.favs); changed('favs'); }
+    if (data.recent) { localStorage.setItem(ukey(RECENT_KEY), data.recent); changed('recent'); }
     if (data.lastProfile) localStorage.setItem(LAST_KEY, data.lastProfile);
-    if (data.lists) localStorage.setItem(LISTS_KEY, data.lists);
+    if (data.lists) { localStorage.setItem(ukey(LISTS_KEY), data.lists); changed('lists'); }
   }
+
+  /* بيانات المستخدم الخام (نص JSON) لكل حقل — للمزامنة: rawField يقرأ، setRawField يكتب بلا
+     إطلاق changeHook (ما يأتي من الخادم لا يُعاد رفعه). guestRaw يقرأ بيانات الضيف للبذرة الأولى. */
+  var FIELD_KEYS = { favs: FAV_KEY, recent: RECENT_KEY, lists: LISTS_KEY };
+  function rawField(field) { return localStorage.getItem(ukey(FIELD_KEYS[field])); }
+  function setRawField(field, json) { localStorage.setItem(ukey(FIELD_KEYS[field]), json); }
+  function guestRaw(field) { return localStorage.getItem(FIELD_KEYS[field]); }
 
   return {
     load: load,
@@ -322,6 +340,13 @@ var Storage = (function () {
     hasCustomList: hasCustomList,
     setCustomList: setCustomList,
     exportAll: exportAll,
-    importAll: importAll
+    importAll: importAll,
+    getUser: function () { return user; },
+    setUser: function (u) { user = u || 'guest'; },
+    onChange: function (fn) { changeHook = fn; },
+    syncFields: Object.keys(FIELD_KEYS),
+    rawField: rawField,
+    setRawField: setRawField,
+    guestRaw: guestRaw
   };
 })();
