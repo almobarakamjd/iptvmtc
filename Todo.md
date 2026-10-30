@@ -154,7 +154,7 @@
 - `.env` (مفتاح SubDL) أُضيف إلى `.gitignore` قبل أي دفع.
 
 ## 👤 المستخدم المخفي (2026-10-30)
-- [ ] رفع `config.php` و`user_data.php` و`progress.php` إلى `amjd.law/apps/ipv/` وتشغيل `user_schema.sql` في phpMyAdmin (لا وصول لنا لاستضافة hPanel)
+- [x] (2026-10-30، اختُبر بـcurl) رفع `config.php` و`user_data.php` و`progress.php` إلى `amjd.law/apps/ipv/` وتشغيل `user_schema.sql` في phpMyAdmin (لا وصول لنا لاستضافة hPanel)
 - [ ] بناء 1.7.0 وتجربته على TCL وMTC: دخول، مفضلة على جهاز تظهر على الآخر، خروج يعيد بيانات الضيف
 - [ ] نسخة سامسونج (`iptvsung`) لا تشمل الميزة — تُنقل إن احتيج
 - [ ] تجربة موضع التوقف بين جهازين: إيقاف فيلم على TCL ومتابعته على MTC من الدقيقة والثانية نفسها
