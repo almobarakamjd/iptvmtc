@@ -28,6 +28,18 @@ var Storage = (function () {
         password: '5160122491',
         pinHash: hash('0000'),      // كلمة المرور الابتدائية 0000 — تُغيَّر من الإعدادات
         adultPinHash: hash('2135')  // إظهار المحتوى المحجوب (XXX) يتطلب 2135
+      },
+      {
+        // يظهر لمستخدم أبي فيصل المخفي فقط (ownerOnly) — أُضيف 2026-10-30، جهاز واحد في الوقت نفسه.
+        // روابط بديلة من المزوّد إن توقف هذا: http://line.lolapaua.online و http://line.kintaso.xyz
+        id: 'p3',
+        name: 'الاشتراك الثالث',
+        host: 'http://line.realpoyua.xyz',
+        username: '9664011a7b',
+        password: 'c7acaf1e821f',
+        pinHash: null,
+        adultPinHash: hash('2135'),
+        ownerOnly: true
       }
     ];
   }
@@ -50,6 +62,8 @@ var Storage = (function () {
               p.password = '5160122491';
             }
           });
+          // ترحيل 2026-10-30: الاشتراك الثالث (للمستخدم المخفي فقط) للأجهزة القائمة
+          if (!list.some(function (p) { return p.id === 'p3'; })) list.push(defaults()[2]);
           save(list);
           return list;
         }

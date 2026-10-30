@@ -180,7 +180,8 @@
     var box = $('profiles-list');
     box.innerHTML = '';
     var els = [];
-    profiles.forEach(function (p) {
+    var shown = visibleProfiles();
+    shown.forEach(function (p) {
       // لا نعرض أي رمز قفل هنا كي لا يثير الفضول
       var el = makeItem(esc(p.name));
       box.appendChild(el); els.push(el);
@@ -189,11 +190,16 @@
     box.appendChild(settings); els.push(settings);
 
     setFocusList(els, function (idx) {
-      if (idx === profiles.length) { openSettings(); return; }
-      var p = profiles[idx];
+      if (idx === shown.length) { openSettings(); return; }
+      var p = shown[idx];
       if (p.pinHash) askPin('أدخل كلمة مرور «' + p.name + '»', p.pinHash, function () { openProfile(p); });
       else openProfile(p);
     });
+  }
+
+  /* الاشتراكات الظاهرة: ما عُلّم ownerOnly لا يظهر إلا لمستخدم أبي فيصل المخفي */
+  function visibleProfiles() {
+    return profiles.filter(function (p) { return !p.ownerOnly || UserSync.active(); });
   }
 
   /* ---------- كلمة المرور ---------- */
@@ -237,7 +243,8 @@
   function openProfile(p) {
     if (current && current.id !== p.id) purgeOtherProfilesCache(p.id);
     current = p;
-    Storage.setLastProfile(p.id);
+    // الاشتراك المخفي لا يُحفظ «آخر اشتراك»، فالتطبيق يبدأ ضيفاً ولا يفتح عليه
+    if (!p.ownerOnly) Storage.setLastProfile(p.id);
     screenStack = [showProfiles];
     homeScreen();
   }
@@ -347,7 +354,11 @@
       homeScreen();
       focus.idx = keepIdx; paintFocus();
     }
-    if (UserSync.active()) { UserSync.leave(); done('تم ✓'); return; }
+    if (UserSync.active()) {
+      UserSync.leave();
+      if (current && current.ownerOnly) { toast('تم ✓'); showProfiles(); return; }
+      done('تم ✓'); return;
+    }
     loader(true);
     UserSync.enter(function () { done('تم ✓'); },
       function (e) { done('تم ✓ — تعذّرت المزامنة: ' + e); });
@@ -2164,6 +2175,7 @@
     box.innerHTML = '';
     var els = [], actions = [];
     profiles.forEach(function (p, i) {
+      if (p.ownerOnly && !UserSync.active()) return;
       var el = makeItem(esc(p.name) + ' <span class="sub">' + esc(p.host) + '</span>');
       box.appendChild(el); els.push(el);
       actions.push(function () { profileActions(p, i); });
@@ -2588,7 +2600,7 @@
      أيقونة "تبديل الاشتراك" أعلى الشاشة الرئيسية تعيد الاختيار متى شاء. */
   (function start() {
     var lastId = Storage.getLastProfile();
-    var p = lastId && profiles.filter(function (pp) { return pp.id === lastId; })[0];
+    var p = lastId && visibleProfiles().filter(function (pp) { return pp.id === lastId; })[0];
     if (!p) { showProfiles(); return; }
     if (p.pinHash) askPin('أدخل كلمة مرور «' + p.name + '»', p.pinHash, function () { openProfile(p); });
     else openProfile(p);
