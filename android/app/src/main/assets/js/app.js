@@ -364,6 +364,31 @@
       function (e) { done('تم ✓ — تعذّرت المزامنة: ' + e); });
   }
 
+  /* الجوال بلا أسهم: ثلاث نقرات متتالية (خلال ثانية ونصف) على الزاوية اليسرى السفلية
+     تُدخل المستخدم المخفي أو تُخرج منه — في الرئيسية (أي اشتراك) وفي شاشة الاشتراكات */
+  (function cornerTaps() {
+    var taps = [];
+    function onTap(x, y) {
+      if (x > window.innerWidth * 0.15 || y < window.innerHeight * 0.85) { taps = []; return; }
+      var home = !$('screen-home').classList.contains('hidden');
+      if (!home && $('screen-profiles').classList.contains('hidden')) return;
+      var now = Date.now();
+      taps = taps.filter(function (t) { return now - t < 1500; });
+      taps.push(now);
+      if (taps.length < 3) return;
+      taps = [];
+      if (home) { toggleOwner(focus.idx); return; }
+      if (UserSync.active()) { UserSync.leave(); toast('تم ✓'); showProfiles(); return; }
+      loader(true);
+      UserSync.enter(function () { loader(false); toast('تم ✓'); showProfiles(); },
+        function (e) { loader(false); toast('تم ✓ — تعذّرت المزامنة: ' + e); showProfiles(); });
+    }
+    document.addEventListener('touchstart', function (ev) {
+      var t = ev.changedTouches && ev.changedTouches[0];
+      if (t) onTap(t.clientX, t.clientY);
+    }, { passive: true });
+  })();
+
   /* ---------- «اخترنا لكم»: قائمة محفوظة على الجهاز (Storage، معرّف ثابت picks) ----------
      تُبنى مرة واحدة من قائمة القنوات الكاملة (GULF_PICKS)، ثم تُفتح فوراً بلا أي تحميل.
      الإضافة تفتح منتقياً يقرأ كل القنوات، والحذف بالزر الأحمر أو «تحديد للحذف». */

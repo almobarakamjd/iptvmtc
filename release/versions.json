@@ -1,14 +1,14 @@
 {
   "mytv": {
-    "versionCode": 17,
-    "versionName": "1.7.1",
+    "versionCode": 18,
+    "versionName": "1.7.2",
     "url": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/SmartTVPlus.apk",
-    "notes": "تحسينات في شاشة المواسم والحلقات وإصلاحات عامة."
+    "notes": "تحسينات للجوال وإصلاحات عامة."
   },
   "player": {
-    "versionCode": 7,
-    "versionName": "1.4.0",
+    "versionCode": 8,
+    "versionName": "1.5.0",
     "url": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/PlayerPlus.apk",
-    "notes": "تحسينات في متابعة المشاهدة."
+    "notes": "خيارات الترجمة: الأصلية مع البث، وبلا ترجمة، والبحث في ثلاثة مواقع."
   }
 }
