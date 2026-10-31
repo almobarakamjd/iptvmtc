@@ -35,6 +35,7 @@ import java.net.URL;
  * ملف versions.json بجانب ملفات APK في الإصدار v1.0.0:
  *   {"mytv":   {"versionCode":2,"versionName":"1.1.0","url":"…/SmartTVPlus.apk","notes":"…"},
  *    "player": {"versionCode":2,"versionName":"1.1.0","url":"…/PlayerPlus.apk","notes":"…"}}
+ * ونسخة الجوال (flavor mobile) تأخذ "mobileUrl" من mytv (…/myTvMobile.apk) إن وُجد.
  *
  * أندرويد لا يسمح بالتثبيت الصامت لتطبيق عادي: كل تثبيت يحتاج ضغطة "تثبيت" من المستخدم،
  * ومرة واحدة فقط يسمح لـmyTv+ بتثبيت التطبيقات من إعدادات التلفاز.
@@ -153,12 +154,18 @@ public class UpdateManager {
             if (manual || !skipped("mytv", mytv.optLong("versionCode"))) {
                 ask("تحديث myTv+",
                         "يوجد إصدار جديد من myTv+ (" + mytv.optString("versionName") + ").\n" + mytv.optString("notes"),
-                        "تحديث", () -> downloadAndInstall(mytv.optString("url"), "SmartTVPlus.apk", "myTv+"),
+                        "تحديث", () -> downloadAndInstall(myTvUrl(mytv), "SmartTVPlus.apk", "myTv+"),
                         () -> skip("mytv", mytv.optLong("versionCode")));
                 return;
             }
         }
         if (manual) toast("لديك آخر إصدار من myTv+ و Player+ ✓");
+    }
+
+    /** نسخة الجوال تتحدّث من ملفها (mobileUrl) لا من نسخة التلفاز، وإلا رجعت لها خدمة الإتاحة فيحظرها Play Protect */
+    private static String myTvUrl(JSONObject mytv) {
+        String mobile = mytv.optString("mobileUrl", "");
+        return "mobile".equals(BuildConfig.FLAVOR) && mobile.length() > 0 ? mobile : mytv.optString("url");
     }
 
     // ------------------------------------------------------------------

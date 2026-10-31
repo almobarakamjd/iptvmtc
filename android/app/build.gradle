@@ -17,6 +17,17 @@ android {
         versionName '1.7.2'
     }
 
+    buildFeatures { buildConfig true }
+
+    /* نسختان من نفس الكود: tv للتلفاز والبوكسات (كما كانت)، وmobile للجوال بلا خدمة الإتاحة ولا
+       مسؤول الجهاز — وجودهما يجعل Play Protect يحظر التثبيت على الجوال حظراً تاماً بلا خيار تجاوز.
+       ملف التوزيع: tv ← SmartTVPlus.apk، mobile ← myTvMobile.apk (المحدِّث يختار رابطه بـBuildConfig.FLAVOR) */
+    flavorDimensions 'device'
+    productFlavors {
+        tv { dimension 'device' }
+        mobile { dimension 'device' }
+    }
+
     signingConfigs {
         if (ksProps['storeFile']) {
             oqod {

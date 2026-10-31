@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- نسخة الجوال: تُزال خدمة الإتاحة (تبديل القنوات بالريموت) ومستقبِل المهيمن — الجوال لا يحتاجهما،
+     وبوجودهما يحظر Play Protect تثبيت التطبيق من ملف APK حظراً تاماً -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <receiver android:name=".AdminReceiver" tools:node="remove" />
+        <service android:name=".RemoteKeyAccessibilityService" tools:node="remove" />
+    </application>
+</manifest>

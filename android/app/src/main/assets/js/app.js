@@ -2567,6 +2567,110 @@
     else exitApp();
   }
 
+  /* ---------- اللمس (الجوال) ----------
+     الواجهة مبنية للريموت (تركيز + موافق)، فاللمس يُترجَم لنفس المنطق: النقر على عنصر = تركيزه ثم
+     موافق، والضغط المطوّل على بطاقة/قناة في التصفح = الزر الأحمر (مفضلة/حذف). في المشغّل: نقرة تُظهر
+     الشريط ونقرة ثانية توقف/تشغّل، سحب أفقي تقديم/إرجاع (فيلم)، سحب عمودي قناة تالية/سابقة (مباشر)،
+     وضغط مطوّل يفتح القائمة. زر الرجوع في الجوال يصل كزر الرجوع بالريموت (MainActivity). */
+  (function touchInput() {
+    var start = null, longTimer = null, swallowClick = false;   // النقرة الناتجة عن ضغط مطوّل/سحب لا تُعدّ نقرة
+
+    function visible(id) { return !$(id).classList.contains('hidden'); }
+    function indexIn(list, el) {
+      for (var i = 0; i < list.length; i++) if (list[i] && list[i].contains(el)) return i;
+      return -1;
+    }
+    function pick(i) {
+      focus.idx = i; paintFocus();
+      if (focus.onMove) focus.onMove(i);
+    }
+
+    function tapFocusList(target) {
+      var i = indexIn(focus.list, target);
+      if (i < 0) return;
+      pick(i);
+      if (focus.onEnter) focus.onEnter(i);
+    }
+
+    function tapBrowse(target) {
+      var top = ['search-content-box', 'search-cats-box', 'remove-mode-box'];
+      for (var s = 0; s < top.length; s++) if ($(top[s]).contains(target)) {
+        enterSearchZone(); browse.searchIdx = s; paintSearchFocus();
+        if (s === 0) startSearch(); else if (s === 1) startCatSearch(); else toggleRemoveMode();
+        return;
+      }
+      var bar = itemBarBoxes();
+      for (var b = 0; b < bar.length; b++) if ($(bar[b]).contains(target)) {
+        focusItemSearch(); browse.itemBarIdx = b; paintItemBarFocus();
+        if (bar[b] === 'search-items-box') startItemSearch(); else toggleRemoveMode();
+        return;
+      }
+      var ci = indexIn(browse.catEls, target);
+      if (ci >= 0) { if (browse.zone !== 'cats') focusCats(); pick(ci); focus.onEnter(ci); return; }
+      var ii = indexIn(browse.itemEls, target);
+      if (ii >= 0) { if (browse.zone !== 'items') focusItems(); pick(ii); focus.onEnter(ii); }
+    }
+
+    function tapPlayer(target) {
+      if (player.menuOpen) {
+        if ($('player-menu').contains(target)) tapFocusList(target); else closePlayerMenu();
+        return;
+      }
+      var shown = $('player-osd').classList.contains('visible');
+      showOsd();
+      if (shown) Player.togglePause();
+    }
+
+    function inPlayer() { return visible('screen-player') && !kb.open && !confirmDialog.open; }
+
+    document.addEventListener('touchstart', function (ev) {
+      document.body.classList.add('touch');   // أول لمسة فعلية فقط — WebView التلفاز قد يدّعي دعم اللمس
+      var t = ev.touches[0];
+      start = { x: t.clientX, y: t.clientY, target: ev.target };
+      swallowClick = false;
+      clearTimeout(longTimer);
+      longTimer = setTimeout(function () {
+        if (!start) return;
+        if (inPlayer() && !player.menuOpen) { swallowClick = true; openPlayerMenu(); return; }
+        if (!visible('screen-browse') || kb.open) return;
+        var ii = indexIn(browse.itemEls, start.target);
+        if (ii < 0) return;
+        swallowClick = true;
+        if (browse.zone !== 'items') focusItems();
+        pick(ii);
+        redButton();
+      }, 550);
+    }, { passive: true });
+
+    document.addEventListener('touchmove', function (ev) {
+      var t = ev.touches[0];
+      if (start && (Math.abs(t.clientX - start.x) > 15 || Math.abs(t.clientY - start.y) > 15)) clearTimeout(longTimer);
+    }, { passive: true });
+
+    document.addEventListener('touchend', function (ev) {
+      clearTimeout(longTimer);
+      var t = ev.changedTouches[0], s = start;
+      start = null;
+      if (!s || !t || !inPlayer() || player.menuOpen) return;
+      var dx = t.clientX - s.x, dy = t.clientY - s.y;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 80) return;
+      swallowClick = true;
+      showOsd();
+      if (Math.abs(dx) > Math.abs(dy)) {
+        // RTL كالريموت: السحب لليسار تقديم، ولليمين إرجاع
+        if (player.isVod) Player.seek(dx < 0 ? player.fwdStep : -player.backStep);
+      } else if (!player.isVod) switchChannel(dy < 0 ? 1 : -1);   // سحب لأعلى: القناة التالية
+    }, { passive: true });
+
+    document.addEventListener('click', function (ev) {
+      if (swallowClick) { swallowClick = false; return; }
+      var target = ev.target;
+      if (inPlayer()) tapPlayer(target);
+      else if (visible('screen-browse') && !kb.open && !confirmDialog.open) tapBrowse(target);
+      else tapFocusList(target);
+    });
+  })();
+
   /* ---------- المفاتيح ---------- */
   try {
     ['MediaPlayPause', 'MediaPlay', 'MediaPause', 'MediaRewind', 'MediaFastForward', 'ColorF0Red'].forEach(function (k) {

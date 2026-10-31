@@ -207,3 +207,13 @@ body.in-player, body.in-player .screen, body.in-player #html5-player {
   font-size: 40px; color: #6fb4ff; z-index: 40;
   background: rgba(14,20,32,.85); padding: 30px 60px; border-radius: 16px;
 }
+
+/* الجوال (لمس): القوائم تُمرَّر بالإصبع بدل الاعتماد على تحريك التركيز بالأسهم (touchInput في app.js) */
+body.touch .v-list, body.touch .col.cats, body.touch .items-inner,
+body.touch .player-menu, body.touch .info-plot {
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+}
+body.touch .item, body.touch .search-box, body.touch .icon-btn {
+  -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none;
+}
+body.touch ::-webkit-scrollbar { display: none; }
