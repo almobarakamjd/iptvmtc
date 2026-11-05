@@ -39,7 +39,8 @@ var Storage = (function () {
         password: 'c7acaf1e821f',
         pinHash: null,
         adultPinHash: hash('2135'),
-        ownerOnly: true
+        ownerOnly: true,
+        singleConnection: true  // اتصال واحد فقط: Player+ ينتظر السيرفر عند 458 بعد التقديم/الإرجاع
       }
     ];
   }
@@ -64,6 +65,8 @@ var Storage = (function () {
           });
           // ترحيل 2026-10-30: الاشتراك الثالث (للمستخدم المخفي فقط) للأجهزة القائمة
           if (!list.some(function (p) { return p.id === 'p3'; })) list.push(defaults()[2]);
+          // ترحيل 2026-11-05: علامة الاتصال الواحد للاشتراك الثالث على الأجهزة القائمة
+          list.forEach(function (p) { if (p.id === 'p3' && p.singleConnection === undefined) p.singleConnection = true; });
           save(list);
           return list;
         }

@@ -1817,7 +1817,8 @@
       items: items,
       index: index,
       autoSubtitles: !!autoSubtitles,
-      xtream: { host: current.host, user: current.username, pass: current.password }
+      xtream: { host: current.host, user: current.username, pass: current.password },
+      singleConnection: !!current.singleConnection
     };
     var sync = UserSync.playerSync(current.id);
     if (sync) payload.sync = sync;
