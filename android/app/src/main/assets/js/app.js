@@ -243,6 +243,7 @@
   function openProfile(p) {
     if (current && current.id !== p.id) purgeOtherProfilesCache(p.id);
     current = p;
+    loadMaxConns(p);
     // الاشتراك المخفي لا يُحفظ «آخر اشتراك»، فالتطبيق يبدأ ضيفاً ولا يفتح عليه
     if (!p.ownerOnly) Storage.setLastProfile(p.id);
     screenStack = [showProfiles];
@@ -924,6 +925,26 @@
   var previewHls = null;
   var previewTimer = null;
 
+  /* المعاينة الحيّة تفتح اتصال بث حقيقياً بالسيرفر. في اشتراك حدّه اتصال واحد تحجز هي ذلك
+     الاتصال (وتبقى جلستها نحو دقيقة بعد إيقافها)، فيُرفض المشغّل بعدها برمز 456/458 أو
+     يتنازعان فيتقطع البث — شُخّص على MTC في 2026-11-15 (active_cons صار 1 بمجرد الوقوف على
+     قناة في القائمة). لذلك لا تعمل المعاينة إلا إذا أكّد السيرفر (user_info.max_connections)
+     أن الاشتراك يسمح بأكثر من اتصال؛ والمجهول يُعامل كاتصال واحد. تبقى لوحة الشعار والاسم. */
+  var maxConns = {};
+  function loadMaxConns(p) {
+    var key = p.id + '|' + p.host + '|' + p.username;
+    if (maxConns[key] !== undefined) return;
+    maxConns[key] = 0;
+    Xtream.account(p, function (info) {
+      var n = info && info.user_info ? parseInt(info.user_info.max_connections, 10) : 0;
+      maxConns[key] = n > 0 ? n : 0;
+    }, function () { delete maxConns[key]; });
+  }
+  function previewVideoAllowed() {
+    if (!current || current.singleConnection) return false;
+    return maxConns[current.id + '|' + current.host + '|' + current.username] > 1;
+  }
+
   function stopPreviewVideo() {
     clearTimeout(previewTimer);
     previewTimer = null;
@@ -965,6 +986,7 @@
     $('preview-name').textContent = it.name || '';
     $('preview-cat').textContent = browse.catMap[it.category_id] || '';
     $('preview-archive').textContent = it.tv_archive ? '● تدعم إعادة البث' : '';
+    if (!previewVideoAllowed()) return;
     previewTimer = setTimeout(function () {
       if (browse.kind === 'live' && browse.zone === 'items' && browse.items[idx] === it) startPreviewVideo(idx, it);
     }, 600);
