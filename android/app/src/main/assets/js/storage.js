@@ -23,7 +23,9 @@ var Storage = (function () {
       {
         id: 'p2',
         name: 'الاشتراك الثاني',
-        host: 'http://36bra.site',   // متجر مواراو — بديل World 8K المنتهي (2026-10-26)
+        // متجر مواراو (واتساب ‎+966 58 008 7354، طلب #295657081) — بديل World 8K المنتهي (2026-10-26).
+        // 2026-11-20: المتجر غيّر الهوست من 36bra.site (حُجب/توقف) إلى marco.mom، والمستخدم وكلمة المرور كما هما.
+        host: 'http://marco.mom',
         username: '295657081',
         password: '5160122491',
         pinHash: hash('0000'),      // كلمة المرور الابتدائية 0000 — تُغيَّر من الإعدادات
@@ -58,11 +60,13 @@ var Storage = (function () {
             // ترحيل 2026-10-26: اشتراك World 8K (cf.shop4uu.xyz) انتهى، استُبدل باشتراك متجر مواراو الجديد
             if (p.host === 'http://cf.shop4uu.xyz') {
               p.name = 'الاشتراك الثاني';
-              p.host = 'http://36bra.site';
+              p.host = 'http://marco.mom';
               p.username = '295657081';
               p.password = '5160122491';
             }
           });
+          // ترحيل 2026-11-20: المتجر غيّر هوست الاشتراك الثاني إلى marco.mom
+          list.forEach(function (p) { if (p.host === 'http://36bra.site') p.host = 'http://marco.mom'; });
           // ترحيل 2026-10-30: الاشتراك الثالث (للمستخدم المخفي فقط) للأجهزة القائمة
           if (!list.some(function (p) { return p.id === 'p3'; })) list.push(defaults()[2]);
           // ترحيل 2026-11-05: علامة الاتصال الواحد للاشتراك الثالث على الأجهزة القائمة
