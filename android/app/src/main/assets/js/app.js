@@ -941,8 +941,14 @@
     }, function () { delete maxConns[key]; });
   }
   function previewVideoAllowed() {
-    if (!current || current.singleConnection) return false;
-    return maxConns[current.id + '|' + current.host + '|' + current.username] > 1;
+    return !isSingleConnection();
+  }
+  /* اشتراك باتصال واحد: بالعلامة الصريحة، أو لأن السيرفر لم يؤكد أكثر من اتصال (المجهول = واحد).
+     تُرسل إلى Player+ لينتظر السيرفر صامتاً عند 458/456 بعد التقديم/الإرجاع بدل إظهار الخطأ —
+     كانت للاشتراك الثالث وحده، والاشتراكات الثلاثة كلها الآن اتصال واحد (2026-11-20). */
+  function isSingleConnection() {
+    if (!current || current.singleConnection) return true;
+    return !(maxConns[current.id + '|' + current.host + '|' + current.username] > 1);
   }
 
   function stopPreviewVideo() {
@@ -1840,7 +1846,7 @@
       index: index,
       autoSubtitles: !!autoSubtitles,
       xtream: { host: current.host, user: current.username, pass: current.password },
-      singleConnection: !!current.singleConnection
+      singleConnection: isSingleConnection()
     };
     var sync = UserSync.playerSync(current.id);
     if (sync) payload.sync = sync;
