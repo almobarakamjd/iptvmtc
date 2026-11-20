@@ -135,7 +135,7 @@ body.in-player, body.in-player .screen, body.in-player #html5-player {
   font-size: 28px; text-align: center; padding: 16px 0;
   background: #1a2334; border-radius: 10px; white-space: nowrap;
 }
-.kb-grid .item.kb-ctrl { background: #24304a; color: #9fb4d8; }
+.kb-grid .item.kb-ctrl { background: #24304a; color: #9fb4d8; font-size: 22px; }
 .kb-grid .item.focused { background: #2e6fd8; color: #fff; }
 
 /* شاشة معلومات الفيلم/المسلسل */

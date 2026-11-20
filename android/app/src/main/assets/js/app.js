@@ -2488,17 +2488,26 @@
   var KB_LETTERS = {
     ar: ['ا', 'ب', 'ت', 'ث', 'ج', 'ح', 'خ', 'د', 'ذ', 'ر', 'ز', 'س', 'ش', 'ص', 'ض',
       'ط', 'ظ', 'ع', 'غ', 'ف', 'ق', 'ك', 'ل', 'م', 'ن', 'ه', 'و', 'ي', 'ة', 'ء', 'ئ', 'ؤ'],
-    en: ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', 'A', 'S', 'D', 'F', 'G',
-      'H', 'J', 'K', 'L', 'Z', 'X', 'C', 'V', 'B', 'N', 'M']
+    en: ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 'a', 's', 'd', 'f', 'g',
+      'h', 'j', 'k', 'l', 'z', 'x', 'c', 'v', 'b', 'n', 'm']
   };
   var KB_DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+  /* رموز الروابط الأكثر استعمالاً — تظهر دائماً مع الإنجليزية (26 حرفاً + 10 أرقام + 4 = أربعة صفوف كاملة) */
+  var KB_QUICK = ['.', ':', '/', '-'];
+  /* صفحة الرموز الكاملة (زر «رموز») — أُضيفت 2026-11-21: لم يكن في اللوحة نقطة ولا نقطتان ولا شرطة،
+     فتعذّرت كتابة رابط اشتراك من التلفاز */
+  var KB_SYMBOLS = ['.', ':', '/', '-', '_', '@', '#', '?', '=', '&',
+    '%', '+', '!', '*', '(', ')', ',', ';', "'", '"',
+    '~', '$', '^', '\\', '|', '<', '>', '[', ']', '{', '}', '`'];
   var KB_COLS = 10;
-  var kb = { open: false, value: '', lang: 'ar', done: null, prevId: null };
+  var kb = { open: false, value: '', lang: 'ar', upper: false, done: null, prevId: null };
 
   function promptInput(hostEl, initial, placeholder, done) {
     kb.open = true;
     kb.value = initial || '';
-    kb.lang = 'ar';
+    // حقول الروابط وبيانات الدخول والأرقام تبدأ بالإنجليزية (بحروف صغيرة)، والبحث يبقى عربياً
+    kb.lang = (/[A-Za-z]/.test(kb.value) || /http|رابط|مستخدم|مرور|رمز|host|url/i.test(placeholder || '')) ? 'en' : 'ar';
+    kb.upper = false;
     kb.done = done;
     kb.prevId = document.querySelector('.screen:not(.hidden)').id;
     $('kb-label').textContent = placeholder || '';
@@ -2514,14 +2523,25 @@
   }
 
   function renderKeyboard() {
-    $('kb-preview').textContent = kb.value || '‌';
+    // <bdi> يعزل اتجاه النص: الرابط اللاتيني يُعرض بترتيبه الصحيح داخل الصندوق العربي الاتجاه
+    var pv = $('kb-preview');
+    pv.innerHTML = '';
+    var bdi = document.createElement('bdi');
+    bdi.textContent = kb.value || '‌';
+    pv.appendChild(bdi);
     var box = $('kb-grid');
     var keepIdx = focus.idx || 0;
     box.innerHTML = '';
 
-    var keys = KB_LETTERS[kb.lang].concat(KB_DIGITS);
+    var keys;
+    if (kb.lang === 'sym') keys = KB_SYMBOLS.slice();
+    else if (kb.lang === 'en') {
+      keys = KB_LETTERS.en.map(function (c) { return kb.upper ? c.toUpperCase() : c; }).concat(KB_DIGITS, KB_QUICK);
+    } else keys = KB_LETTERS.ar.concat(KB_DIGITS);
     var els = keys.map(function (ch) {
-      var el = makeItem(ch);
+      var el = makeItem('');
+      el.textContent = ch; // لا innerHTML: الرموز < > & تُكتب كما هي
+      el.setAttribute('dir', 'ltr');
       box.appendChild(el);
       return el;
     });
@@ -2529,14 +2549,19 @@
       return function () { kb.value += ch; renderKeyboard(); };
     });
 
-    var ctrl = [
-      ['🌐 ' + (kb.lang === 'ar' ? 'English' : 'عربي'), function () { kb.lang = kb.lang === 'ar' ? 'en' : 'ar'; renderKeyboard(); }],
+    function setLang(l) { return function () { kb.lang = l; focus.idx = 0; renderKeyboard(); }; }
+    var ctrl = [];
+    if (kb.lang !== 'ar') ctrl.push(['🌐 عربي', setLang('ar')]);
+    if (kb.lang !== 'en') ctrl.push(['🌐 English', setLang('en')]);
+    if (kb.lang !== 'sym') ctrl.push(['#+= رموز', setLang('sym')]);
+    if (kb.lang === 'en') ctrl.push([kb.upper ? '⇩ صغيرة abc' : '⇧ كبيرة ABC', function () { kb.upper = !kb.upper; renderKeyboard(); }]);
+    ctrl.push(
       ['␣ مسافة', function () { kb.value += ' '; renderKeyboard(); }],
       ['⌫ حذف', function () { kb.value = kb.value.slice(0, -1); renderKeyboard(); }],
       ['🧹 مسح الكل', function () { kb.value = ''; renderKeyboard(); }],
       ['✔ تم', function () { closeKeyboard(kb.value.trim()); }],
       ['✕ إلغاء', function () { closeKeyboard(null); }]
-    ];
+    );
     ctrl.forEach(function (c) {
       var el = makeItem(c[0], 'kb-ctrl');
       box.appendChild(el);
