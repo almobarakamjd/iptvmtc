@@ -19,7 +19,7 @@ import android.view.accessibility.AccessibilityEvent;
     2) تشغّل خادم HTTP محلي مصغّر (RemoteControlServer) يسمح بالتحكم بالتلفاز عن بُعد من جهاز آخر
        بنفس شبكة الواي فاي (رئيسية/رجوع/وسائط/فتح تطبيق) — بديل لـADB لا يحتاج كابل ولا خيارات
        مطوّر، فقط تفعيل هذه الخدمة نفسها.
-    3) تجعل نافذة HDMI المصغّرة (HdmiWindow) عائمة فوق كل التطبيقات ومنها Player+. */
+    3) تجعل النوافذ المصغّرة (FloatFrame: نافذة HDMI ونافذة القناة) عائمة فوق كل التطبيقات. */
 public class RemoteKeyAccessibilityService extends AccessibilityService {
 
     private static final String[] PLAYER_PACKAGES = {
@@ -50,7 +50,9 @@ public class RemoteKeyAccessibilityService extends AccessibilityService {
 
     @Override
     public void onDestroy() {
-        HdmiWindow.get(this).hide();   // نافذتها العائمة مضافة عبر هذه الخدمة فتزول معها
+        // النوافذ العائمة مضافة عبر هذه الخدمة فتزول معها
+        HdmiWindow.get(this).hide();
+        ChannelWindow.get().hide();
         instance = null;
         if (remoteControlServer != null) remoteControlServer.stop();
         super.onDestroy();

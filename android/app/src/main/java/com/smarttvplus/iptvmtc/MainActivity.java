@@ -339,8 +339,8 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** جسر نافذة HDMI المصغّرة (HdmiWindow): قائمة المداخل، والإظهار والإخفاء، وهل هي عائمة
-        فوق Player+ (يتطلب تفعيل خدمة الإتاحة) */
+    /** جسر النوافذ المصغّرة: نافذة HDMI (HdmiWindow) ونافذة القناة (ChannelWindow)، وهل تعومان
+        فوق التطبيقات الأخرى (يتطلب تفعيل خدمة الإتاحة) */
     private class HdmiBridge {
         @JavascriptInterface
         public String inputs() {
@@ -349,7 +349,18 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public boolean canFloat() {
-            return HdmiWindow.get(MainActivity.this).canFloat();
+            return FloatFrame.canFloat();
+        }
+
+        /** قناة مباشرة في نافذة عائمة (ChannelWindow) */
+        @JavascriptInterface
+        public void showChannel(final String url, final String title, final int corner, final int sizePct) {
+            runOnUiThread(() -> ChannelWindow.get().show(MainActivity.this, url, title, corner, sizePct));
+        }
+
+        @JavascriptInterface
+        public void hideChannel() {
+            runOnUiThread(() -> ChannelWindow.get().hide());
         }
 
         @JavascriptInterface
@@ -417,6 +428,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         HdmiWindow.get(this).hide();
+        ChannelWindow.get().hide();
         if (web != null) web.destroy();
         super.onDestroy();
     }

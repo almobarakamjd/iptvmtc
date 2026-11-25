@@ -1546,6 +1546,7 @@
      "الملف التالي" المدمج أصلاً بـVLC/MX ينقل تلقائياً للحلقة التالية حتى لو كانت بموسم لاحق،
      بلا أي تدخل من تطبيقنا أثناء العرض */
   function playSeriesEpisode(series, allEps, idx) {
+    if (floatChCfg().profileId === current.id) floatChStop();
     if (effectivePlayer('series') === OUR_PLAYER && playSeriesInOurPlayer(series, allEps, idx)) return;
     if (allEps.length > 1 && playExternalEpisodePlaylist(series, allEps, idx)) return;
     var ep = allEps[idx];
@@ -1941,6 +1942,8 @@
 
   function playStream(kind, id, ext, name, srcItem) {
     var url = Xtream.streamUrl(current, kind, id, ext);
+    if (kind === 'live' && floatChPlay(url, name)) return;
+    if (floatChCfg().profileId === current.id) floatChStop();
     if (effectivePlayer(kind) === OUR_PLAYER && playInOurPlayer(kind, id, ext, name, srcItem)) return;
     if (kind === 'live' && player.channelList && player.channelList.length > 1
         && playExternalPlaylist(player.channelList, player.channelIndex)) return;
@@ -2279,6 +2282,22 @@
       actions.push(openRemoteZapSettings);
     }
 
+    if (typeof AndroidHdmi !== 'undefined' && AndroidHdmi.showChannel) {
+      var fc = floatChCfg();
+      var fcEl = makeItem('🪟 فتح القنوات في نافذة عائمة: <span class="sub">' + (fc.on ? 'نعم' : 'لا') + '</span>');
+      box.appendChild(fcEl); els.push(fcEl);
+      actions.push(function () {
+        fc.on = !fc.on;
+        if (!fc.on) { fc.url = ''; fc.title = ''; }
+        floatChSave(fc); hdmiKeepFocus = true; renderSettings();
+      });
+      if (fc.url) {
+        var fcStop = makeItem('⏹ إغلاق نافذة القناة: <span class="sub">' + esc(fc.title || '') + '</span>');
+        box.appendChild(fcStop); els.push(fcStop);
+        actions.push(function () { floatChStop(); hdmiKeepFocus = true; renderSettings(); });
+      }
+    }
+
     if (typeof AndroidHdmi !== 'undefined') {
       var hc = hdmiCfg(), hIns = hdmiInputs();
       var hCur = hIns.filter(function (x) { return x.id === hc.input; })[0];
@@ -2345,8 +2364,53 @@
   function hdmiSave(c) {
     try { localStorage.setItem(HDMI_KEY, JSON.stringify(c)); } catch (e) {}
     hdmiApply();
+    floatChApply();
     hdmiKeepFocus = true;
     renderSettings();
+  }
+
+  /* ---------- نافذة القناة العائمة (ChannelWindow في أندرويد) ----------
+     حين يكون الخيار مفعّلاً تُفتح القناة المختارة في نافذة مصغّرة بدل المشغّل، وتبقى فوق التطبيقات
+     الأخرى (stc tv مثلاً). تأخذ حجم نافذة HDMI، وتقابلها أفقياً في الموضع حتى لا تتراكبا. */
+  var FLOAT_CH_KEY = 'floatChannel';
+
+  function floatChCfg() {
+    var c = null;
+    try { c = JSON.parse(localStorage.getItem(FLOAT_CH_KEY)); } catch (e) {}
+    c = c || {};
+    return { on: !!c.on, url: c.url || '', title: c.title || '', profileId: c.profileId || '' };
+  }
+
+  function floatChSave(c) {
+    try { localStorage.setItem(FLOAT_CH_KEY, JSON.stringify(c)); } catch (e) {}
+    floatChApply();
+  }
+
+  function floatChApply() {
+    if (typeof AndroidHdmi === 'undefined' || !AndroidHdmi.showChannel) return;
+    var c = floatChCfg(), h = hdmiCfg();
+    if (c.on && c.url) AndroidHdmi.showChannel(c.url, c.title, h.on ? h.corner ^ 1 : h.corner, h.size);
+    else AndroidHdmi.hideChannel();
+  }
+
+  /* يعيد true إن فُتحت القناة في النافذة العائمة (فلا تُرسل للمشغّل) */
+  function floatChPlay(url, title) {
+    if (typeof AndroidHdmi === 'undefined' || !AndroidHdmi.showChannel) return false;
+    var c = floatChCfg();
+    if (!c.on) return false;
+    c.url = url; c.title = title || ''; c.profileId = current ? current.id : '';
+    floatChSave(c);
+    toast('🪟 ' + (title || 'القناة') + ' في النافذة العائمة' +
+      (AndroidHdmi.canFloat() ? '' : ' (داخل myTv+ فقط — فعّل خدمة الإتاحة لتبقى فوق التطبيقات)'), 5000);
+    return true;
+  }
+
+  /* النافذة تحجز اتصال الاشتراك الوحيد: تُغلق قبل تشغيل أي شيء آخر من الاشتراك نفسه */
+  function floatChStop() {
+    var c = floatChCfg();
+    if (!c.url) return;
+    c.url = ''; c.title = ''; c.profileId = '';
+    floatChSave(c);
   }
 
   /* ضغطة الزر تدور: مطفأة ← المدخل الأول ← الذي يليه ← … ← مطفأة */
@@ -2860,6 +2924,7 @@
      أيقونة "تبديل الاشتراك" أعلى الشاشة الرئيسية تعيد الاختيار متى شاء. */
   (function start() {
     hdmiApply();
+    floatChStop();   // نافذة القناة لا تعود وحدها عند فتح التطبيق: لا نحجز اتصال الاشتراك بلا طلب
     var lastId = Storage.getLastProfile();
     var p = lastId && visibleProfiles().filter(function (pp) { return pp.id === lastId; })[0];
     if (!p) { showProfiles(); return; }
@@ -2871,6 +2936,7 @@
   // بعد رجوع المستخدم من شاشة إتاحة أندرويد، بدل ما يبقى يشوف حالة "تبديل القنوات" قديمة
   window.__onAndroidResume = function () {
     hdmiApply();
+    floatChApply();
     var s = $('screen-settings');
     if (s && !s.classList.contains('hidden')) renderSettings();
     refreshEpisodeMarks();

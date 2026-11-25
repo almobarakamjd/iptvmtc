@@ -4,20 +4,15 @@ import android.app.Activity;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.graphics.PixelFormat;
 import android.graphics.RectF;
 import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
 import android.media.tv.TvContract;
 import android.media.tv.TvInputInfo;
 import android.media.tv.TvInputManager;
 import android.media.tv.TvView;
-import android.util.DisplayMetrics;
 import android.util.Log;
-import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.widget.FrameLayout;
 
 import org.json.JSONArray;
@@ -29,9 +24,7 @@ import java.util.List;
  * نافذة HDMI المصغّرة: مربع صغير في زاوية الشاشة يعرض مدخل HDMI (عبر TvView) أثناء استعمال
  * myTv+ وPlayer+.
  *
- * - إن كانت خدمة الإتاحة {@link RemoteKeyAccessibilityService} مفعّلة فالنافذة عائمة على مستوى
- *   النظام (TYPE_ACCESSIBILITY_OVERLAY) فتبقى فوق Player+ أيضاً، وإلا فهي داخل نشاط myTv+ وحده.
- *   لم نعتمد إذن «الظهور فوق التطبيقات» لأن Android TV 9 بلا شاشة لمنحه (جُرِّب على المحاكي).
+ * - موضعها وتعويمها فوق التطبيقات الأخرى في {@link FloatFrame}.
  * - إن لم يكن في الجهاز مدخل HDMI (المحاكي مثلاً) يُعرض مدخل افتراضي {@link #DEMO_ID} بصورة
  *   افتراضية (أشرطة ألوان)، لتجربة الموضع والحجم بلا عتاد. والصورة نفسها تظهر فوق المدخل الحقيقي
  *   ما دام بلا إشارة.
@@ -44,9 +37,8 @@ final class HdmiWindow {
     private static HdmiWindow instance;
 
     private final Context app;
-    private FrameLayout box;
+    private FloatFrame frame;
     private TvView tv;
-    private WindowManager floatWm;   // غير null حين تكون النافذة عائمة (مضافة عبر خدمة الإتاحة)
     private String shownAs;   // توقيع ما هو معروض الآن، لتجاهل طلب إظهار مطابق (عند كل عودة للتطبيق)
 
     private HdmiWindow(Context c) { app = c.getApplicationContext(); }
@@ -86,37 +78,15 @@ final class HdmiWindow {
         return arr.toString();
     }
 
-    boolean canFloat() {
-        return RemoteKeyAccessibilityService.instance != null;
-    }
+    boolean isShown() { return frame != null; }
 
-    boolean isShown() { return box != null; }
-
-    /**
-     * @param corner  0 أعلى اليمين، 1 أعلى اليسار، 2 أسفل اليمين، 3 أسفل اليسار
-     * @param sizePct عرض النافذة نسبةً من عرض الشاشة (50 = ربع الشاشة)
-     */
+    /** الموضع والحجم كما في {@link FloatFrame#attach} */
     void show(Activity activity, String inputId, int corner, int sizePct) {
-        String sig = inputId + "|" + corner + "|" + sizePct + "|" + canFloat();
-        if (box != null && sig.equals(shownAs)) return;
+        String sig = inputId + "|" + corner + "|" + sizePct + "|" + FloatFrame.canFloat();
+        if (frame != null && sig.equals(shownAs)) return;
         hide();
-        DisplayMetrics dm = new DisplayMetrics();
-        activity.getWindowManager().getDefaultDisplay().getRealMetrics(dm);
-        int pct = Math.max(15, Math.min(60, sizePct));
-        int w = dm.widthPixels * pct / 100;
-        int h = w * 9 / 16;
-        int margin = dm.widthPixels / 60;
-        int gravity = (corner == 1 || corner == 3 ? Gravity.LEFT : Gravity.RIGHT)
-                | (corner >= 2 ? Gravity.BOTTOM : Gravity.TOP);
-
-        RemoteKeyAccessibilityService service = RemoteKeyAccessibilityService.instance;
-        Context ctx = service != null ? service : activity;
-        FrameLayout f = new FrameLayout(ctx);
-        GradientDrawable frame = new GradientDrawable();
-        frame.setColor(0xFF000000);
-        frame.setStroke(3, 0xFFFFFFFF);
-        f.setBackground(frame);
-        f.setPadding(3, 3, 3, 3);
+        FloatFrame f = new FloatFrame(activity);
+        Context ctx = f.ctx;
 
         boolean demo = DEMO_ID.equals(inputId) || inputId == null || inputId.length() == 0;
         final Placeholder ph = new Placeholder(ctx, demo ? "صورة افتراضية" : "لا إشارة");
@@ -130,7 +100,7 @@ final class HdmiWindow {
                     @Override public void onDisconnected(String id) { ph.setVisibility(View.VISIBLE); }
                 });
                 tv.setStreamVolume(0f);
-                f.addView(tv, new FrameLayout.LayoutParams(
+                f.view.addView(tv, new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
                 tv.tune(inputId, TvContract.buildChannelUriForPassthroughInput(inputId));
             } catch (Throwable t) {
@@ -139,32 +109,12 @@ final class HdmiWindow {
             }
         }
         // الصورة الافتراضية فوق سطح الفيديو: تُخفى عند وصول الإشارة وتعود عند انقطاعها
-        f.addView(ph, new FrameLayout.LayoutParams(
+        f.view.addView(ph, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         try {
-            if (service != null) {
-                WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
-                        w, h,
-                        WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                                | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                                | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
-                        PixelFormat.TRANSLUCENT);
-                lp.gravity = gravity;
-                lp.x = margin;
-                lp.y = margin;
-                WindowManager wm = (WindowManager) service.getSystemService(Context.WINDOW_SERVICE);
-                wm.addView(f, lp);
-                floatWm = wm;
-            } else {
-                FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(w, h, gravity);
-                lp.setMargins(margin, margin, margin, margin);
-                activity.addContentView(f, lp);
-                floatWm = null;
-            }
-            box = f;
+            f.attach(activity, corner, sizePct);
+            frame = f;
             shownAs = sig;
         } catch (Throwable t) {
             Log.w(TAG, "show failed", t);
@@ -173,19 +123,10 @@ final class HdmiWindow {
     }
 
     void hide() {
-        if (box == null) return;
         releaseTv();
-        try {
-            if (floatWm != null) {
-                floatWm.removeView(box);
-            } else if (box.getParent() instanceof ViewGroup) {
-                ((ViewGroup) box.getParent()).removeView(box);
-            }
-        } catch (Throwable t) {
-            Log.w(TAG, "hide failed", t);
-        }
-        box = null;
-        floatWm = null;
+        if (frame != null) frame.detach();
+        frame = null;
+        shownAs = null;
     }
 
     private void releaseTv() {
