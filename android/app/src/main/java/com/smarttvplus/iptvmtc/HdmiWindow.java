@@ -87,10 +87,16 @@ final class HdmiWindow {
 
     boolean isShown() { return frame != null; }
 
+    /** ظاهرة فوق التطبيقات الأخرى فعلاً (لا داخل نشاط myTv+ فقط) */
+    boolean isFloating() { return frame != null && frame.isFloating(); }
+
     /** الموضع والحجم كما في {@link FloatFrame#attach} */
     void show(Activity activity, String inputId, int corner, int sizePct) {
         String sig = inputId + "|" + corner + "|" + sizePct + "|" + FloatFrame.canFloat();
-        if (frame != null && sig.equals(shownAs)) return;
+        if (frame != null && sig.equals(shownAs)) {
+            frame.setFull(false);   // العودة إلى myTv+ تعيدها صغيرة دائماً
+            return;
+        }
         hide();
         RemoteLog.log("hdmi", "show " + sig + " muted=" + muted);
         FloatFrame f = new FloatFrame(activity);

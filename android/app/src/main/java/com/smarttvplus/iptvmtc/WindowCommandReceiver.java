@@ -13,11 +13,14 @@ public class WindowCommandReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         String cmd = intent.getStringExtra("cmd");
+        if (FloatFrame.app == null) FloatFrame.app = context.getApplicationContext();
         HdmiWindow h = HdmiWindow.get(context);
         // 1 ظاهرة وعائمة فوق المشغّل، 2 تعمل لكن داخل myTv+ فقط (خدمة الإتاحة غير مفعّلة)، 3 مطفأة
-        if (isOrderedBroadcast()) setResultCode(!h.isShown() ? 3 : FloatFrame.canFloat() ? 1 : 2);
-        RemoteLog.log("cmd", cmd + " shown=" + h.isShown() + " float=" + FloatFrame.canFloat());
-        if (!h.isShown() || cmd == null) return;
+        if (isOrderedBroadcast()) setResultCode(!h.isShown() ? 3 : h.isFloating() ? 1 : 2);
+        RemoteLog.log("cmd", cmd + " shown=" + h.isShown() + " floating=" + h.isFloating());
+        // نافذة داخل myTv+ لا يراها المستخدم من المشغّل: تكبيرها أو فتح صوتها هناك خطأ (1.7.9: عادت
+        // مكبَّرة لملء الشاشة بعد الرجوع، وصوت المدخل اختلط بالفيلم)
+        if (cmd == null || !h.isFloating()) return;
         switch (cmd) {
             case "audio_hdmi": h.setMuted(false); break;
             case "audio_main": h.setMuted(true); break;

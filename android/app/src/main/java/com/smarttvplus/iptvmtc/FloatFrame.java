@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.content.Context;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
+import android.provider.Settings;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.ViewGroup;
@@ -16,8 +18,9 @@ import android.widget.FrameLayout;
  *
  * إن كانت خدمة الإتاحة {@link RemoteKeyAccessibilityService} مفعّلة فالإطار عائم على مستوى النظام
  * (TYPE_ACCESSIBILITY_OVERLAY) فيبقى فوق كل التطبيقات (Player+، stc tv…)، وإلا فهو داخل نشاط
- * myTv+ وحده. لم نعتمد إذن «الظهور فوق التطبيقات» لأن Android TV 9 بلا شاشة لمنحه (جُرِّب على
- * المحاكي).
+ * myTv+ وحده. وإن لم تعمل الخدمة (على TCL بأندرويد 12 تُفعَّل ولا تشتغل) ومُنح إذن «الظهور فوق
+ * التطبيقات» فالإطار عائم به (TYPE_APPLICATION_OVERLAY). Android TV 9 بلا شاشة لمنح هذا الإذن،
+ * فهناك تبقى الخدمة هي الطريق.
  */
 final class FloatFrame {
 
@@ -30,9 +33,16 @@ final class FloatFrame {
     private boolean full;
     private int w, h, margin;
 
+    /** سياق التطبيق، يُضبط عند بدء النشاط أو وصول أمر من Player+ */
+    static volatile Context app;
+    /** عائم بإذن «الظهور فوق التطبيقات» لا بخدمة الإتاحة */
+    private final boolean overlay;
+
     FloatFrame(Activity activity) {
+        if (app == null) app = activity.getApplicationContext();
         service = RemoteKeyAccessibilityService.instance;
-        ctx = service != null ? service : activity;
+        overlay = service == null && canOverlay();
+        ctx = service != null ? service : overlay ? app : activity;
         view = new FrameLayout(ctx);
         GradientDrawable border = new GradientDrawable();
         border.setColor(0xFF000000);
@@ -42,7 +52,16 @@ final class FloatFrame {
     }
 
     static boolean canFloat() {
-        return RemoteKeyAccessibilityService.instance != null;
+        return RemoteKeyAccessibilityService.instance != null || canOverlay();
+    }
+
+    /** إذن «الظهور فوق التطبيقات»: على TCL (أندرويد 12) خدمة الإتاحة لا تشتغل، وهذا الإذن بديلها */
+    static boolean canOverlay() {
+        try {
+            return app != null && Build.VERSION.SDK_INT >= 23 && Settings.canDrawOverlays(app);
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     /**
@@ -58,19 +77,24 @@ final class FloatFrame {
         margin = dm.widthPixels / 60;
         int gravity = (corner == 1 || corner == 3 ? Gravity.LEFT : Gravity.RIGHT)
                 | (corner >= 2 ? Gravity.BOTTOM : Gravity.TOP);
-        if (service != null) {
+        if (service != null || overlay) {
+            int type = service != null ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+                    : Build.VERSION.SDK_INT >= 26 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                    : WindowManager.LayoutParams.TYPE_PHONE;
             WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                     w, h,
-                    WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                    type,
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                            | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                            // أندرويد 12+ يجعل نافذة التطبيق العائمة غير القابلة للمس شبه شفافة (حد 0.8)،
+                            // فنتركها قابلة للمس حين تعوم بالإذن؛ التلفاز بلا لمس أصلاً
+                            | (service != null ? WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE : 0)
                             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                             | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
                     PixelFormat.TRANSLUCENT);
             lp.gravity = gravity;
             lp.x = margin;
             lp.y = margin;
-            wm = (WindowManager) service.getSystemService(Context.WINDOW_SERVICE);
+            wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
             wm.addView(view, lp);
         } else {
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(w, h, gravity);
@@ -81,6 +105,8 @@ final class FloatFrame {
     }
 
     /** ملء الشاشة أو العودة إلى الزاوية (يأمر به Player+ عبر {@link WindowCommandReceiver}) */
+    boolean isFloating() { return wm != null; }
+
     void setFull(boolean f) {
         if (!attached || full == f) return;
         full = f;

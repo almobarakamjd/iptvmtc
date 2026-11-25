@@ -35,6 +35,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        FloatFrame.app = getApplicationContext();
         RemoteLog.init(this);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -377,6 +378,32 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void mute(final boolean m) {
             runOnUiThread(() -> HdmiWindow.get(MainActivity.this).setMuted(m));
+        }
+
+        /** هل مُنح إذن «الظهور فوق التطبيقات»؟ */
+        @JavascriptInterface
+        public boolean canOverlay() {
+            return FloatFrame.canOverlay();
+        }
+
+        /** يفتح شاشة منح إذن «الظهور فوق التطبيقات»؛ false إن لم تكن في الجهاز شاشة له */
+        @JavascriptInterface
+        public boolean openOverlaySettings() {
+            android.net.Uri pkg = android.net.Uri.parse("package:" + getPackageName());
+            String[] actions = {
+                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+            };
+            for (String a : actions) {
+                try {
+                    startActivity(new Intent(a, pkg));
+                    RemoteLog.log("app", "openOverlaySettings via " + a);
+                    return true;
+                } catch (Exception e) {
+                    RemoteLog.log("app", "openOverlaySettings " + a + " failed: " + e);
+                }
+            }
+            return false;
         }
 
         /** true مرة واحدة إن أُطفئت النافذة من قائمة Player+، لتحفظ الواجهة الإطفاء */

@@ -2320,9 +2320,11 @@
         box.appendChild(sndEl); els.push(sndEl);
         actions.push(function () { hc.sound = !hc.sound; hdmiSave(hc); });
         if (!AndroidHdmi.canFloat()) {
-          var floatEl = makeItem('🪟 إبقاء نافذة HDMI فوق Player+: <span class="sub">غير مفعّل — اضغط للتفعيل</span>');
+          var floatEl = makeItem('🪟 إظهار النافذة فوق المشغّل: <span class="sub">غير مفعّل — اضغط لمنح إذن «الظهور فوق التطبيقات»</span>');
           box.appendChild(floatEl); els.push(floatEl);
-          actions.push(openRemoteZapSettings);
+          actions.push(function () {
+            if (!(AndroidHdmi.openOverlaySettings && AndroidHdmi.openOverlaySettings())) openRemoteZapSettings();
+          });
         }
       }
     }
