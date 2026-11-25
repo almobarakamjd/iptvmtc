@@ -1,9 +1,9 @@
 {
   "mytv": {
-    "versionCode": 26,
-    "versionName": "1.7.10",
+    "versionCode": 27,
+    "versionName": "1.7.11",
     "url": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/SmartTVPlus.apk",
-    "notes": "إصلاح تكبير النافذة الصغيرة عند العودة من المشغّل، وطريق جديد لإظهارها فوق المشغّل بإذن «الظهور فوق التطبيقات».",
+    "notes": "نافذة HDMI: عودة تلقائية للتطبيق إن حوّل التلفاز الشاشة إلى المدخل، وإصلاح تكبيرها عند العودة من المشغّل.",
     "mobileUrl": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/myTvMobile.apk"
   },
   "player": {
