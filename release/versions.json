@@ -1,15 +1,15 @@
 {
   "mytv": {
-    "versionCode": 24,
-    "versionName": "1.7.8",
+    "versionCode": 25,
+    "versionName": "1.7.9",
     "url": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/SmartTVPlus.apk",
-    "notes": "نافذة HDMI: صوتها مسموع حتى يعمل المشغّل، وتُطفأ وحدها إن أخرجت من التطبيق، وزر لإخفائها أثناء الكتابة.",
+    "notes": "نافذة HDMI مكتومة افتراضياً مع زر للصوت في الإعدادات، وتحسينات في التحكم بها من المشغّل.",
     "mobileUrl": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/myTvMobile.apk"
   },
   "player": {
-    "versionCode": 12,
-    "versionName": "1.5.4",
+    "versionCode": 13,
+    "versionName": "1.5.5",
     "url": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/PlayerPlus.apk",
-    "notes": "في القائمة: اختيار الصوت بين المشغّل والنافذة الصغيرة، وتكبير النافذة لملء الشاشة، وإطفاؤها."
+    "notes": "رسالة أوضح عند تعذّر التحكم بالنافذة الصغيرة."
   }
 }
