@@ -1,9 +1,9 @@
 {
   "mytv": {
-    "versionCode": 22,
-    "versionName": "1.7.6",
+    "versionCode": 23,
+    "versionName": "1.7.7",
     "url": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/SmartTVPlus.apk",
-    "notes": "تحديث بيانات الاشتراك الثاني، وإصلاح رسالة «مستخدم على جهاز آخر» عند التقديم والإرجاع.",
+    "notes": "نافذة HDMI المصغّرة (من الإعدادات)، ونافذة القناة العائمة، ولوحة مفاتيح بالرموز والحروف الصغيرة.",
     "mobileUrl": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/myTvMobile.apk"
   },
   "player": {
