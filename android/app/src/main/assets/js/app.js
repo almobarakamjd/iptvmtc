@@ -2316,6 +2316,9 @@
         actions.push(function () {
           hc.size = HDMI_SIZES[(HDMI_SIZES.indexOf(hc.size) + 1) % HDMI_SIZES.length]; hdmiSave(hc);
         });
+        var sndEl = makeItem('🔊 صوت نافذة HDMI: <span class="sub">' + (hc.sound ? 'مسموع' : 'مكتوم') + '</span>');
+        box.appendChild(sndEl); els.push(sndEl);
+        actions.push(function () { hc.sound = !hc.sound; hdmiSave(hc); });
         if (!AndroidHdmi.canFloat()) {
           var floatEl = makeItem('🪟 إبقاء نافذة HDMI فوق Player+: <span class="sub">غير مفعّل — اضغط للتفعيل</span>');
           box.appendChild(floatEl); els.push(floatEl);
@@ -2351,7 +2354,8 @@
       on: !!c.on,
       input: c.input || '',
       corner: c.corner >= 0 && c.corner < HDMI_CORNERS.length ? c.corner : 1,
-      size: HDMI_SIZES.indexOf(c.size) >= 0 ? c.size : 33
+      size: HDMI_SIZES.indexOf(c.size) >= 0 ? c.size : 33,
+      sound: !!c.sound   // مكتومة افتراضياً: الصوت المسموع (1.7.8) أخرج تلفاز TCL إلى المدخل بملء الشاشة
     };
   }
 
@@ -2366,6 +2370,7 @@
     }
     if (!(c.on && c.input)) { AndroidHdmi.hide(); return; }
     if (c.input !== 'demo' && AndroidHdmi.resumed && !hdmiGuard(c)) return;
+    if (AndroidHdmi.mute) AndroidHdmi.mute(!c.sound);   // قبل التوليف، فالصوت يُضبط عند إنشاء النافذة
     AndroidHdmi.show(c.input, c.corner, c.size);
   }
 
@@ -2400,7 +2405,7 @@
   /* صوت نافذة HDMI مسموع حتى يعمل المشغّل الكبير، ويعود عند الرجوع للتطبيق */
   function hdmiMute(m) {
     if (typeof AndroidHdmi === 'undefined' || !AndroidHdmi.mute) return;
-    AndroidHdmi.mute(m);
+    AndroidHdmi.mute(m || !hdmiCfg().sound);
     if (!m) return;
     // نحن من يغادر إلى المشغّل: ليس خروجاً سببه التوليف، فلا يُحسب على الحارس
     if (hdmiGuardTimer) { clearTimeout(hdmiGuardTimer); hdmiGuardTimer = null; }

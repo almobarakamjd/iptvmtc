@@ -41,7 +41,7 @@ final class HdmiWindow {
     private final Context app;
     private FloatFrame frame;
     private TvView tv;
-    private boolean muted;    // يُكتم ما دام المشغّل الكبير يعمل، وإلا فصوت المدخل مسموع
+    private boolean muted = true;    // يُكتم ما دام المشغّل الكبير يعمل، وإلا فصوت المدخل مسموع
     private String shownAs;   // توقيع ما هو معروض الآن، لتجاهل طلب إظهار مطابق (عند كل عودة للتطبيق)
 
     private HdmiWindow(Context c) { app = c.getApplicationContext(); }
