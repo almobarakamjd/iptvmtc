@@ -1547,6 +1547,7 @@
      بلا أي تدخل من تطبيقنا أثناء العرض */
   function playSeriesEpisode(series, allEps, idx) {
     if (floatChCfg().profileId === current.id) floatChStop();
+    hdmiMute(true);
     if (effectivePlayer('series') === OUR_PLAYER && playSeriesInOurPlayer(series, allEps, idx)) return;
     if (allEps.length > 1 && playExternalEpisodePlaylist(series, allEps, idx)) return;
     var ep = allEps[idx];
@@ -1944,6 +1945,7 @@
     var url = Xtream.streamUrl(current, kind, id, ext);
     if (kind === 'live' && floatChPlay(url, name)) return;
     if (floatChCfg().profileId === current.id) floatChStop();
+    hdmiMute(true);
     if (effectivePlayer(kind) === OUR_PLAYER && playInOurPlayer(kind, id, ext, name, srcItem)) return;
     if (kind === 'live' && player.channelList && player.channelList.length > 1
         && playExternalPlaylist(player.channelList, player.channelIndex)) return;
@@ -2357,8 +2359,42 @@
   function hdmiApply() {
     if (typeof AndroidHdmi === 'undefined') return;
     var c = hdmiCfg();
-    if (c.on && c.input) AndroidHdmi.show(c.input, c.corner, c.size);
-    else AndroidHdmi.hide();
+    if (!(c.on && c.input)) { AndroidHdmi.hide(); return; }
+    if (c.input !== 'demo' && AndroidHdmi.resumed && !hdmiGuard(c)) return;
+    AndroidHdmi.show(c.input, c.corner, c.size);
+  }
+
+  /* حارس HDMI: على تلفاز TCL حوّل التوليفُ التلفازَ كله إلى مدخل HDMI بملء الشاشة وأخرج المستخدم من
+     التطبيق (1.7.7)، ولأن النافذة تعود عند كل فتح فقد يُحبس خارج التطبيق. فنضع علامة قبل التوليف
+     ولا نمحوها إلا إن بقي التطبيق في الواجهة 6 ثوانٍ بعده. فإن وُجدت العلامة عند التطبيق التالي
+     فالتوليف السابق أخرجنا: تُطفأ النافذة. يعيد false إن أطفأها. */
+  var HDMI_GUARD = 'hdmiGuard', hdmiGuardTimer = null;
+
+  function hdmiGuard(c) {
+    var g = null;
+    try { g = localStorage.getItem(HDMI_GUARD); } catch (e) {}
+    if (hdmiGuardTimer) return true;            // توليف جارٍ لم تمضِ مهلته بعد
+    if (g === c.input) {
+      try {
+        localStorage.removeItem(HDMI_GUARD);
+        c.on = false;
+        localStorage.setItem(HDMI_KEY, JSON.stringify(c));
+      } catch (e) {}
+      AndroidHdmi.hide();
+      toast('📺 أُطفئت نافذة HDMI: التلفاز يحوّل الشاشة كلها إلى المدخل ويخرج من التطبيق عند تشغيلها', 9000);
+      return false;
+    }
+    try { localStorage.setItem(HDMI_GUARD, c.input); } catch (e) {}
+    hdmiGuardTimer = setTimeout(function () {
+      hdmiGuardTimer = null;
+      if (AndroidHdmi.resumed()) { try { localStorage.removeItem(HDMI_GUARD); } catch (e) {} }
+    }, 6000);
+    return true;
+  }
+
+  /* صوت نافذة HDMI مسموع حتى يعمل المشغّل الكبير، ويعود عند الرجوع للتطبيق */
+  function hdmiMute(m) {
+    if (typeof AndroidHdmi !== 'undefined' && AndroidHdmi.mute) AndroidHdmi.mute(m);
   }
 
   function hdmiSave(c) {
@@ -2935,6 +2971,7 @@
   // ينادى من MainActivity.onResume (أندرويد فقط) — يحدّث شاشة الإعدادات إن كانت مفتوحة فوراً
   // بعد رجوع المستخدم من شاشة إتاحة أندرويد، بدل ما يبقى يشوف حالة "تبديل القنوات" قديمة
   window.__onAndroidResume = function () {
+    hdmiMute(false);
     hdmiApply();
     floatChApply();
     var s = $('screen-settings');

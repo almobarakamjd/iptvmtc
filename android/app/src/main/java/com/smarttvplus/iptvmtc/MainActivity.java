@@ -372,6 +372,17 @@ public class MainActivity extends Activity {
         public void hide() {
             runOnUiThread(() -> HdmiWindow.get(MainActivity.this).hide());
         }
+
+        @JavascriptInterface
+        public void mute(final boolean m) {
+            runOnUiThread(() -> HdmiWindow.get(MainActivity.this).setMuted(m));
+        }
+
+        /** هل التطبيق في الواجهة الآن؟ يستعمله حارس HDMI ليعرف هل أخرجنا التلفاز عند التوليف */
+        @JavascriptInterface
+        public boolean resumed() {
+            return resumed;
+        }
     }
 
     /** يرسل ضغطة زر إلى الويب برقم مفاتيح سامسونج الذي يفهمه app.js */
@@ -417,8 +428,17 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onPause() {
+        resumed = false;
+        super.onPause();
+    }
+
+    private volatile boolean resumed;
+
+    @Override
     protected void onResume() {
         super.onResume();
+        resumed = true;
         if (updates != null) updates.onResume();
         // يعيد رسم شاشة الإعدادات إن كانت مفتوحة — كي تتحدّث حالة "تبديل القنوات بالريموت"
         // فوراً بعد رجوع المستخدم من شاشة إتاحة أندرويد (تفعيل/تعطيل الخدمة يحصل هناك لا عندنا)

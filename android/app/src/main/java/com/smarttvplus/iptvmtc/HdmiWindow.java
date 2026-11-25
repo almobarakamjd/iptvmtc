@@ -28,7 +28,7 @@ import java.util.List;
  * - إن لم يكن في الجهاز مدخل HDMI (المحاكي مثلاً) يُعرض مدخل افتراضي {@link #DEMO_ID} بصورة
  *   افتراضية (أشرطة ألوان)، لتجربة الموضع والحجم بلا عتاد. والصورة نفسها تظهر فوق المدخل الحقيقي
  *   ما دام بلا إشارة.
- * - صوت المدخل مكتوم دائماً حتى لا يختلط بصوت ما يُشاهَد.
+ * - صوت المدخل مسموع ما دام لا شيء يعمل في المشغّل الكبير، ويُكتم عند تشغيله ({@link #setMuted}).
  */
 final class HdmiWindow {
 
@@ -39,6 +39,7 @@ final class HdmiWindow {
     private final Context app;
     private FloatFrame frame;
     private TvView tv;
+    private boolean muted;    // يُكتم ما دام المشغّل الكبير يعمل، وإلا فصوت المدخل مسموع
     private String shownAs;   // توقيع ما هو معروض الآن، لتجاهل طلب إظهار مطابق (عند كل عودة للتطبيق)
 
     private HdmiWindow(Context c) { app = c.getApplicationContext(); }
@@ -99,7 +100,7 @@ final class HdmiWindow {
                     @Override public void onConnectionFailed(String id) { ph.setVisibility(View.VISIBLE); }
                     @Override public void onDisconnected(String id) { ph.setVisibility(View.VISIBLE); }
                 });
-                tv.setStreamVolume(0f);
+                tv.setStreamVolume(muted ? 0f : 1f);
                 f.view.addView(tv, new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
                 tv.tune(inputId, TvContract.buildChannelUriForPassthroughInput(inputId));
@@ -120,6 +121,11 @@ final class HdmiWindow {
             Log.w(TAG, "show failed", t);
             releaseTv();
         }
+    }
+
+    void setMuted(boolean m) {
+        muted = m;
+        if (tv != null) try { tv.setStreamVolume(m ? 0f : 1f); } catch (Throwable ignored) {}
     }
 
     void hide() {
