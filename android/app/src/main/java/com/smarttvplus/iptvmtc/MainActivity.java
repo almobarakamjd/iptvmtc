@@ -4,6 +4,7 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
@@ -420,6 +421,12 @@ public class MainActivity extends Activity {
             return resumed;
         }
 
+        /** نحن من يغادر إلى المشغّل الآن: ليست انتزاعاً من التلفاز */
+        @JavascriptInterface
+        public void leaving() {
+            HdmiWindow.selfLeaveAt = android.os.SystemClock.elapsedRealtime();
+        }
+
         /** سطر من الواجهة إلى سجلّ التشخيص عن بُعد */
         @JavascriptInterface
         public void log(String msg) {
@@ -474,6 +481,7 @@ public class MainActivity extends Activity {
         resumed = false;
         RemoteLog.log("app", "onPause finishing=" + isFinishing());
         RemoteLog.flush();
+        returnIfSnatched();
         super.onPause();
     }
 
@@ -486,6 +494,37 @@ public class MainActivity extends Activity {
     }
 
     private volatile boolean resumed;
+
+    /**
+     * على TCL (سجلّ 2026-11-26): بعد التوليف على HDMI بأقل من ثانيتين يفتح تطبيق التلفاز نفسه
+     * (com.tcl.tv/com.tcl.player.TVActivity) بملء الشاشة فوقنا. وحين عاد المستخدم يدوياً بقيت النافذة
+     * تعرض المدخل ولم يتكرر الانتزاع. فنعود نحن تلقائياً: إن غادرنا الواجهة خلال 4 ثوانٍ من التوليف
+     * بلا طلب منا، نعيد نشاطنا للأمام (مرتين على الأكثر لكل توليف حتى لا ندور).
+     */
+    private void returnIfSnatched() {
+        if (isFinishing()) return;
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (!HdmiWindow.get(this).isShown()) return;
+        if (now - HdmiWindow.lastTuneAt > 4000 || now - HdmiWindow.selfLeaveAt < 4000) return;
+        if (HdmiWindow.returnsAfterTune >= 2) return;
+        HdmiWindow.returnsAfterTune++;
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            if (resumed) return;
+            String fg = RemoteKeyAccessibilityService.instance != null
+                    ? RemoteKeyAccessibilityService.instance.getForegroundPackage() : "?";
+            RemoteLog.log("app", "snatched after tune by " + fg + " -> returning to front");
+            try {
+                Intent i = new Intent(this, MainActivity.class)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                                | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                Context c = RemoteKeyAccessibilityService.instance != null
+                        ? RemoteKeyAccessibilityService.instance : getApplicationContext();
+                c.startActivity(i);
+            } catch (Exception e) {
+                RemoteLog.log("app", "return failed: " + e);
+            }
+        }, 900);
+    }
 
     @Override
     protected void onResume() {

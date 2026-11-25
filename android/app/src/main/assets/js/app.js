@@ -2415,6 +2415,7 @@
     if (typeof AndroidHdmi === 'undefined' || !AndroidHdmi.mute) return;
     AndroidHdmi.mute(m || !hdmiCfg().sound);
     if (!m) return;
+    if (AndroidHdmi.leaving) AndroidHdmi.leaving();
     // نحن من يغادر إلى المشغّل: ليس خروجاً سببه التوليف، فلا يُحسب على الحارس
     if (hdmiGuardTimer) { clearTimeout(hdmiGuardTimer); hdmiGuardTimer = null; }
     try { localStorage.removeItem(HDMI_GUARD); } catch (e) {}

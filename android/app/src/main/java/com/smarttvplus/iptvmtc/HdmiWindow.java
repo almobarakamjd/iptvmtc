@@ -37,6 +37,11 @@ final class HdmiWindow {
     private static HdmiWindow instance;
     /** أطفأها المستخدم من قائمة Player+: تقرؤها الواجهة عند العودة فتحفظ الإطفاء */
     static volatile boolean offByPlayer;
+    /** وقت آخر توليف على مدخل حقيقي، وكم مرة أعدنا أنفسنا للواجهة بعده (انظر MainActivity.onPause) */
+    static volatile long lastTuneAt;
+    static volatile int returnsAfterTune;
+    /** وقت آخر مغادرة بدأناها نحن (تشغيل فيلم): ليست انتزاعاً */
+    static volatile long selfLeaveAt;
 
     private final Context app;
     private FloatFrame frame;
@@ -132,6 +137,8 @@ final class HdmiWindow {
                 f.view.addView(tv, new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
                 tv.tune(inputId, TvContract.buildChannelUriForPassthroughInput(inputId));
+                lastTuneAt = android.os.SystemClock.elapsedRealtime();
+                returnsAfterTune = 0;
             } catch (Throwable t) {
                 Log.w(TAG, "tune failed: " + inputId, t);
                 RemoteLog.log("hdmi", "tune failed: " + t);
