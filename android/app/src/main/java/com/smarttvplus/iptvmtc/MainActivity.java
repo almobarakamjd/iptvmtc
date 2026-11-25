@@ -35,6 +35,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        RemoteLog.init(this);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         ensureStoragePermission();
@@ -391,6 +392,12 @@ public class MainActivity extends Activity {
         public boolean resumed() {
             return resumed;
         }
+
+        /** سطر من الواجهة إلى سجلّ التشخيص عن بُعد */
+        @JavascriptInterface
+        public void log(String msg) {
+            RemoteLog.log("js", msg);
+        }
     }
 
     /** يرسل ضغطة زر إلى الويب برقم مفاتيح سامسونج الذي يفهمه app.js */
@@ -438,7 +445,17 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         resumed = false;
+        RemoteLog.log("app", "onPause finishing=" + isFinishing());
+        RemoteLog.flush();
         super.onPause();
+    }
+
+    @Override
+    protected void onStop() {
+        RemoteLog.log("app", "onStop");
+        RemoteLog.dumpOwnLogcat("onStop");
+        RemoteLog.flush();
+        super.onStop();
     }
 
     private volatile boolean resumed;
@@ -447,6 +464,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         resumed = true;
+        RemoteLog.log("app", "onResume");
         if (updates != null) updates.onResume();
         // يعيد رسم شاشة الإعدادات إن كانت مفتوحة — كي تتحدّث حالة "تبديل القنوات بالريموت"
         // فوراً بعد رجوع المستخدم من شاشة إتاحة أندرويد (تفعيل/تعطيل الخدمة يحصل هناك لا عندنا)

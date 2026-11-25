@@ -16,6 +16,7 @@ public class WindowCommandReceiver extends BroadcastReceiver {
         HdmiWindow h = HdmiWindow.get(context);
         // 1 ظاهرة وعائمة فوق المشغّل، 2 تعمل لكن داخل myTv+ فقط (خدمة الإتاحة غير مفعّلة)، 3 مطفأة
         if (isOrderedBroadcast()) setResultCode(!h.isShown() ? 3 : FloatFrame.canFloat() ? 1 : 2);
+        RemoteLog.log("cmd", cmd + " shown=" + h.isShown() + " float=" + FloatFrame.canFloat());
         if (!h.isShown() || cmd == null) return;
         switch (cmd) {
             case "audio_hdmi": h.setMuted(false); break;

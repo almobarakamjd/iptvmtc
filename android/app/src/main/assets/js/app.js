@@ -2371,6 +2371,7 @@
     if (!(c.on && c.input)) { AndroidHdmi.hide(); return; }
     if (c.input !== 'demo' && AndroidHdmi.resumed && !hdmiGuard(c)) return;
     if (AndroidHdmi.mute) AndroidHdmi.mute(!c.sound);   // قبل التوليف، فالصوت يُضبط عند إنشاء النافذة
+    rlog('hdmiApply ' + JSON.stringify(c));
     AndroidHdmi.show(c.input, c.corner, c.size);
   }
 
@@ -2379,6 +2380,10 @@
      ولا نمحوها إلا إن بقي التطبيق في الواجهة 6 ثوانٍ بعده. فإن وُجدت العلامة عند التطبيق التالي
      فالتوليف السابق أخرجنا: تُطفأ النافذة. يعيد false إن أطفأها. */
   var HDMI_GUARD = 'hdmiGuard', hdmiGuardTimer = null;
+
+  function rlog(m) {
+    try { if (typeof AndroidHdmi !== 'undefined' && AndroidHdmi.log) AndroidHdmi.log(m); } catch (e) {}
+  }
 
   function hdmiGuard(c) {
     var g = null;
@@ -2391,6 +2396,7 @@
         localStorage.setItem(HDMI_KEY, JSON.stringify(c));
       } catch (e) {}
       AndroidHdmi.hide();
+      rlog('guard: turned hdmi off (left app after tune) input=' + c.input);
       toast('📺 أُطفئت نافذة HDMI: التلفاز يحوّل الشاشة كلها إلى المدخل ويخرج من التطبيق عند تشغيلها', 9000);
       return false;
     }

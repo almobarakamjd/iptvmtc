@@ -46,10 +46,12 @@ public class RemoteKeyAccessibilityService extends AccessibilityService {
         remoteControlServer = new RemoteControlServer(this);
         remoteControlServer.start();
         instance = this;
+        RemoteLog.log("a11y", "service connected");
     }
 
     @Override
     public void onDestroy() {
+        RemoteLog.log("a11y", "service destroyed");
         // النوافذ العائمة مضافة عبر هذه الخدمة فتزول معها
         HdmiWindow.get(this).hide();
         ChannelWindow.get().hide();
@@ -66,7 +68,9 @@ public class RemoteKeyAccessibilityService extends AccessibilityService {
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
                 && event.getPackageName() != null) {
-            foregroundPackage = event.getPackageName().toString();
+            String pkg = event.getPackageName().toString();
+            if (!pkg.equals(foregroundPackage)) RemoteLog.log("fg", pkg + " / " + event.getClassName());
+            foregroundPackage = pkg;
         }
     }
 

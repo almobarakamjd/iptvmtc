@@ -61,6 +61,10 @@ final class HdmiWindow {
                 for (TvInputInfo info : list) {
                     if (!info.isPassthroughInput()) continue;
                     JSONObject o = new JSONObject();
+                    int state = -1;
+                    try { state = m.getInputState(info.getId()); } catch (Throwable ignored) {}
+                    RemoteLog.log("hdmi", "input id=" + info.getId() + " type=" + info.getType()
+                            + " state=" + state + " parent=" + info.getParentId() + " hidden=" + info.isHidden(app));
                     o.put("id", info.getId());
                     CharSequence label = info.loadLabel(app);
                     o.put("label", label != null ? label.toString() : info.getId());
@@ -88,6 +92,7 @@ final class HdmiWindow {
         String sig = inputId + "|" + corner + "|" + sizePct + "|" + FloatFrame.canFloat();
         if (frame != null && sig.equals(shownAs)) return;
         hide();
+        RemoteLog.log("hdmi", "show " + sig + " muted=" + muted);
         FloatFrame f = new FloatFrame(activity);
         Context ctx = f.ctx;
 
@@ -97,10 +102,25 @@ final class HdmiWindow {
             try {
                 tv = new TvView(ctx);
                 tv.setCallback(new TvView.TvInputCallback() {
-                    @Override public void onVideoAvailable(String id) { ph.setVisibility(View.GONE); }
-                    @Override public void onVideoUnavailable(String id, int reason) { ph.setVisibility(View.VISIBLE); }
-                    @Override public void onConnectionFailed(String id) { ph.setVisibility(View.VISIBLE); }
-                    @Override public void onDisconnected(String id) { ph.setVisibility(View.VISIBLE); }
+                    @Override public void onVideoAvailable(String id) {
+                        RemoteLog.log("hdmi", "videoAvailable " + id);
+                        ph.setVisibility(View.GONE);
+                    }
+                    @Override public void onVideoUnavailable(String id, int reason) {
+                        RemoteLog.log("hdmi", "videoUnavailable " + id + " reason=" + reason);
+                        ph.setVisibility(View.VISIBLE);
+                    }
+                    @Override public void onConnectionFailed(String id) {
+                        RemoteLog.log("hdmi", "connectionFailed " + id);
+                        ph.setVisibility(View.VISIBLE);
+                    }
+                    @Override public void onDisconnected(String id) {
+                        RemoteLog.log("hdmi", "disconnected " + id);
+                        ph.setVisibility(View.VISIBLE);
+                    }
+                    @Override public void onVideoSizeChanged(String id, int w, int h) {
+                        RemoteLog.log("hdmi", "videoSize " + w + "x" + h);
+                    }
                 });
                 tv.setStreamVolume(muted ? 0f : 1f);
                 f.view.addView(tv, new FrameLayout.LayoutParams(
@@ -108,6 +128,7 @@ final class HdmiWindow {
                 tv.tune(inputId, TvContract.buildChannelUriForPassthroughInput(inputId));
             } catch (Throwable t) {
                 Log.w(TAG, "tune failed: " + inputId, t);
+                RemoteLog.log("hdmi", "tune failed: " + t);
                 tv = null;
             }
         }
@@ -121,20 +142,24 @@ final class HdmiWindow {
             shownAs = sig;
         } catch (Throwable t) {
             Log.w(TAG, "show failed", t);
+            RemoteLog.log("hdmi", "attach failed: " + t);
             releaseTv();
         }
     }
 
     void setBig(boolean big) {
+        RemoteLog.log("hdmi", "setBig " + big + " shown=" + (frame != null));
         if (frame != null) frame.setFull(big);
     }
 
     void setMuted(boolean m) {
+        if (m != muted) RemoteLog.log("hdmi", "setMuted " + m + " tv=" + (tv != null));
         muted = m;
         if (tv != null) try { tv.setStreamVolume(m ? 0f : 1f); } catch (Throwable ignored) {}
     }
 
     void hide() {
+        if (frame != null) RemoteLog.log("hdmi", "hide");
         releaseTv();
         if (frame != null) frame.detach();
         frame = null;
