@@ -62,6 +62,7 @@ public class MainActivity extends Activity {
         web.addJavascriptInterface(new OpenBridge(), "AndroidOpen");
         web.addJavascriptInterface(new StorageBridge(), "AndroidStorage");
         web.addJavascriptInterface(new SystemBridge(), "AndroidSystem");
+        web.addJavascriptInterface(new HdmiBridge(), "AndroidHdmi");
 
         startDiagnosticPingServer(); // تشخيص مؤقت: نتأكد هل المشكلة خاصة بخدمة الإتاحة أم عامة بالشبكة/التلفاز
 
@@ -338,6 +339,30 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** جسر نافذة HDMI المصغّرة (HdmiWindow): قائمة المداخل، والإظهار والإخفاء، وهل هي عائمة
+        فوق Player+ (يتطلب تفعيل خدمة الإتاحة) */
+    private class HdmiBridge {
+        @JavascriptInterface
+        public String inputs() {
+            return HdmiWindow.get(MainActivity.this).inputsJson();
+        }
+
+        @JavascriptInterface
+        public boolean canFloat() {
+            return HdmiWindow.get(MainActivity.this).canFloat();
+        }
+
+        @JavascriptInterface
+        public void show(final String inputId, final int corner, final int sizePct) {
+            runOnUiThread(() -> HdmiWindow.get(MainActivity.this).show(MainActivity.this, inputId, corner, sizePct));
+        }
+
+        @JavascriptInterface
+        public void hide() {
+            runOnUiThread(() -> HdmiWindow.get(MainActivity.this).hide());
+        }
+    }
+
     /** يرسل ضغطة زر إلى الويب برقم مفاتيح سامسونج الذي يفهمه app.js */
     private void sendJsKey(int keyCode) {
         String js = "(function(){var e=new KeyboardEvent('keydown',{bubbles:true});"
@@ -391,6 +416,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        HdmiWindow.get(this).hide();
         if (web != null) web.destroy();
         super.onDestroy();
     }

@@ -2279,7 +2279,84 @@
       actions.push(openRemoteZapSettings);
     }
 
+    if (typeof AndroidHdmi !== 'undefined') {
+      var hc = hdmiCfg(), hIns = hdmiInputs();
+      var hCur = hIns.filter(function (x) { return x.id === hc.input; })[0];
+      var hdmiEl = makeItem('📺 نافذة HDMI المصغّرة: <span class="sub">' +
+        (hc.on && hCur ? esc(hCur.label) : 'مطفأة') + '</span>');
+      box.appendChild(hdmiEl); els.push(hdmiEl);
+      actions.push(function () { cycleHdmiInput(); });
+      if (hc.on) {
+        var cornerEl = makeItem('↔ موضع نافذة HDMI: <span class="sub">' + HDMI_CORNERS[hc.corner] + '</span>');
+        box.appendChild(cornerEl); els.push(cornerEl);
+        actions.push(function () { hc.corner = (hc.corner + 1) % HDMI_CORNERS.length; hdmiSave(hc); });
+        var sizeEl = makeItem('🔍 حجم نافذة HDMI: <span class="sub">' + hdmiSizeName(hc.size) + '</span>');
+        box.appendChild(sizeEl); els.push(sizeEl);
+        actions.push(function () {
+          hc.size = HDMI_SIZES[(HDMI_SIZES.indexOf(hc.size) + 1) % HDMI_SIZES.length]; hdmiSave(hc);
+        });
+        if (!AndroidHdmi.canFloat()) {
+          var floatEl = makeItem('🪟 إبقاء نافذة HDMI فوق Player+: <span class="sub">غير مفعّل — اضغط للتفعيل</span>');
+          box.appendChild(floatEl); els.push(floatEl);
+          actions.push(openRemoteZapSettings);
+        }
+      }
+    }
+
+    var keep = focus.idx;
     setFocusList(els, function (idx) { actions[idx](); });
+    // بعد تغيير إعداد HDMI تُعاد رسم الشاشة: يبقى التحديد على الزر نفسه لا على أول القائمة
+    if (hdmiKeepFocus && keep < els.length) { focus.idx = keep; paintFocus(); }
+    hdmiKeepFocus = false;
+  }
+
+  /* ---------- نافذة HDMI المصغّرة (HdmiWindow في أندرويد) ---------- */
+  var HDMI_KEY = 'hdmiWindow';
+  var HDMI_CORNERS = ['أعلى اليمين', 'أعلى اليسار', 'أسفل اليمين', 'أسفل اليسار'];
+  var HDMI_SIZES = [25, 33, 50];
+  var hdmiKeepFocus = false;
+
+  function hdmiSizeName(n) { return n === 50 ? 'ربع الشاشة' : n === 33 ? 'متوسطة' : 'صغيرة'; }
+
+  function hdmiInputs() {
+    try { return JSON.parse(AndroidHdmi.inputs()) || []; } catch (e) { return []; }
+  }
+
+  function hdmiCfg() {
+    var c = null;
+    try { c = JSON.parse(localStorage.getItem(HDMI_KEY)); } catch (e) {}
+    c = c || {};
+    return {
+      on: !!c.on,
+      input: c.input || '',
+      corner: c.corner >= 0 && c.corner < HDMI_CORNERS.length ? c.corner : 1,
+      size: HDMI_SIZES.indexOf(c.size) >= 0 ? c.size : 33
+    };
+  }
+
+  /* يطبّق الإعداد المحفوظ: يُنادى عند فتح التطبيق وعند العودة إليه (بعد منح الإذن مثلاً) */
+  function hdmiApply() {
+    if (typeof AndroidHdmi === 'undefined') return;
+    var c = hdmiCfg();
+    if (c.on && c.input) AndroidHdmi.show(c.input, c.corner, c.size);
+    else AndroidHdmi.hide();
+  }
+
+  function hdmiSave(c) {
+    try { localStorage.setItem(HDMI_KEY, JSON.stringify(c)); } catch (e) {}
+    hdmiApply();
+    hdmiKeepFocus = true;
+    renderSettings();
+  }
+
+  /* ضغطة الزر تدور: مطفأة ← المدخل الأول ← الذي يليه ← … ← مطفأة */
+  function cycleHdmiInput() {
+    var c = hdmiCfg(), ins = hdmiInputs(), i = -1;
+    if (c.on) ins.forEach(function (x, k) { if (x.id === c.input) i = k; });
+    var next = ins[i + 1];
+    c.on = !!next;
+    c.input = next ? next.id : '';
+    hdmiSave(c);
   }
 
   /* يفتح شاشة "الإتاحة" الحقيقية بإعدادات أندرويد — التفعيل نفسه يدوي إجبارياً (لا يوجد API
@@ -2782,6 +2859,7 @@
      نفتح مباشرة على آخر اشتراك استُخدم (إن وُجد) بدل إجبار الاختيار في كل مرة؛
      أيقونة "تبديل الاشتراك" أعلى الشاشة الرئيسية تعيد الاختيار متى شاء. */
   (function start() {
+    hdmiApply();
     var lastId = Storage.getLastProfile();
     var p = lastId && visibleProfiles().filter(function (pp) { return pp.id === lastId; })[0];
     if (!p) { showProfiles(); return; }
@@ -2792,6 +2870,7 @@
   // ينادى من MainActivity.onResume (أندرويد فقط) — يحدّث شاشة الإعدادات إن كانت مفتوحة فوراً
   // بعد رجوع المستخدم من شاشة إتاحة أندرويد، بدل ما يبقى يشوف حالة "تبديل القنوات" قديمة
   window.__onAndroidResume = function () {
+    hdmiApply();
     var s = $('screen-settings');
     if (s && !s.classList.contains('hidden')) renderSettings();
     refreshEpisodeMarks();
