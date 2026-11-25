@@ -35,6 +35,8 @@ final class HdmiWindow {
     static final String DEMO_ID = "demo";
     private static final String TAG = "HdmiWindow";
     private static HdmiWindow instance;
+    /** أطفأها المستخدم من قائمة Player+: تقرؤها الواجهة عند العودة فتحفظ الإطفاء */
+    static volatile boolean offByPlayer;
 
     private final Context app;
     private FloatFrame frame;
@@ -121,6 +123,10 @@ final class HdmiWindow {
             Log.w(TAG, "show failed", t);
             releaseTv();
         }
+    }
+
+    void setBig(boolean big) {
+        if (frame != null) frame.setFull(big);
     }
 
     void setMuted(boolean m) {

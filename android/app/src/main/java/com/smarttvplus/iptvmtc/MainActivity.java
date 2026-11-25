@@ -378,6 +378,14 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> HdmiWindow.get(MainActivity.this).setMuted(m));
         }
 
+        /** true مرة واحدة إن أُطفئت النافذة من قائمة Player+، لتحفظ الواجهة الإطفاء */
+        @JavascriptInterface
+        public boolean takeOff() {
+            boolean b = HdmiWindow.offByPlayer;
+            HdmiWindow.offByPlayer = false;
+            return b;
+        }
+
         /** هل التطبيق في الواجهة الآن؟ يستعمله حارس HDMI ليعرف هل أخرجنا التلفاز عند التوليف */
         @JavascriptInterface
         public boolean resumed() {

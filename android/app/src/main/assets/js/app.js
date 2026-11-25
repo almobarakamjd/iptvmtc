@@ -2358,7 +2358,12 @@
   /* يطبّق الإعداد المحفوظ: يُنادى عند فتح التطبيق وعند العودة إليه (بعد منح الإذن مثلاً) */
   function hdmiApply() {
     if (typeof AndroidHdmi === 'undefined') return;
+    if (kb && kb.winHidden) return;   // مخفية مؤقتاً أثناء الكتابة
     var c = hdmiCfg();
+    if (AndroidHdmi.takeOff && AndroidHdmi.takeOff()) {   // أُطفئت من قائمة Player+
+      c.on = false;
+      try { localStorage.setItem(HDMI_KEY, JSON.stringify(c)); } catch (e) {}
+    }
     if (!(c.on && c.input)) { AndroidHdmi.hide(); return; }
     if (c.input !== 'demo' && AndroidHdmi.resumed && !hdmiGuard(c)) return;
     AndroidHdmi.show(c.input, c.corner, c.size);
@@ -2394,7 +2399,15 @@
 
   /* صوت نافذة HDMI مسموع حتى يعمل المشغّل الكبير، ويعود عند الرجوع للتطبيق */
   function hdmiMute(m) {
-    if (typeof AndroidHdmi !== 'undefined' && AndroidHdmi.mute) AndroidHdmi.mute(m);
+    if (typeof AndroidHdmi === 'undefined' || !AndroidHdmi.mute) return;
+    AndroidHdmi.mute(m);
+    if (!m) return;
+    // نحن من يغادر إلى المشغّل: ليس خروجاً سببه التوليف، فلا يُحسب على الحارس
+    if (hdmiGuardTimer) { clearTimeout(hdmiGuardTimer); hdmiGuardTimer = null; }
+    try { localStorage.removeItem(HDMI_GUARD); } catch (e) {}
+    if (hdmiCfg().on && !AndroidHdmi.canFloat()) {
+      toast('📺 نافذة HDMI لا تظهر فوق المشغّل إلا بتفعيل خدمة myTv+ في «الإتاحة» (من الإعدادات)', 6000);
+    }
   }
 
   function hdmiSave(c) {
@@ -2424,6 +2437,7 @@
 
   function floatChApply() {
     if (typeof AndroidHdmi === 'undefined' || !AndroidHdmi.showChannel) return;
+    if (kb && kb.winHidden) return;
     var c = floatChCfg(), h = hdmiCfg();
     if (c.on && c.url) AndroidHdmi.showChannel(c.url, c.title, h.on ? h.corner ^ 1 : h.corner, h.size);
     else AndroidHdmi.hideChannel();
@@ -2694,6 +2708,7 @@
 
   function closeKeyboard(result) {
     kb.open = false;
+    if (kb.winHidden) { kb.winHidden = false; hdmiApply(); floatChApply(); }   // النوافذ تعود بعد الكتابة
     var cb = kb.done; kb.done = null;
     show(kb.prevId);
     cb(result);
@@ -2732,6 +2747,15 @@
     if (kb.lang !== 'en') ctrl.push(['🌐 English', setLang('en')]);
     if (kb.lang !== 'sym') ctrl.push(['#+= رموز', setLang('sym')]);
     if (kb.lang === 'en') ctrl.push([kb.upper ? '⇩ صغيرة abc' : '⇧ كبيرة ABC', function () { kb.upper = !kb.upper; renderKeyboard(); }]);
+    // إخفاء النوافذ المصغّرة مؤقتاً أثناء الكتابة حتى لا تغطي اللوحة (طلب أبي فيصل 2026-11-25)
+    if (typeof AndroidHdmi !== 'undefined' && (hdmiCfg().on || floatChCfg().url)) {
+      ctrl.push([kb.winHidden ? '📺 إظهار النافذة' : '📺 إخفاء النافذة', function () {
+        kb.winHidden = !kb.winHidden;
+        if (kb.winHidden) { AndroidHdmi.hide(); if (AndroidHdmi.hideChannel) AndroidHdmi.hideChannel(); }
+        else { hdmiApply(); floatChApply(); }
+        renderKeyboard();
+      }]);
+    }
     ctrl.push(
       ['␣ مسافة', function () { kb.value += ' '; renderKeyboard(); }],
       ['⌫ حذف', function () { kb.value = kb.value.slice(0, -1); renderKeyboard(); }],

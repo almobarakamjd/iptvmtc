@@ -37,6 +37,11 @@
             </intent-filter>
         </activity>
 
+        <!-- أوامر نافذة HDMI من Player+ (اختيار الصوت والتكبير) -->
+        <receiver
+            android:name=".WindowCommandReceiver"
+            android:exported="true" />
+
         <receiver
             android:name=".InstallResultReceiver"
             android:exported="false" />

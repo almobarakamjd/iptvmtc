@@ -27,6 +27,8 @@ final class FloatFrame {
     private final RemoteKeyAccessibilityService service;
     private WindowManager wm;
     private boolean attached;
+    private boolean full;
+    private int w, h, margin;
 
     FloatFrame(Activity activity) {
         service = RemoteKeyAccessibilityService.instance;
@@ -51,9 +53,9 @@ final class FloatFrame {
         DisplayMetrics dm = new DisplayMetrics();
         activity.getWindowManager().getDefaultDisplay().getRealMetrics(dm);
         int pct = Math.max(15, Math.min(60, sizePct));
-        int w = dm.widthPixels * pct / 100;
-        int h = w * 9 / 16;
-        int margin = dm.widthPixels / 60;
+        w = dm.widthPixels * pct / 100;
+        h = w * 9 / 16;
+        margin = dm.widthPixels / 60;
         int gravity = (corner == 1 || corner == 3 ? Gravity.LEFT : Gravity.RIGHT)
                 | (corner >= 2 ? Gravity.BOTTOM : Gravity.TOP);
         if (service != null) {
@@ -76,6 +78,29 @@ final class FloatFrame {
             activity.addContentView(view, lp);
         }
         attached = true;
+    }
+
+    /** ملء الشاشة أو العودة إلى الزاوية (يأمر به Player+ عبر {@link WindowCommandReceiver}) */
+    void setFull(boolean f) {
+        if (!attached || full == f) return;
+        full = f;
+        int m = f ? 0 : margin;
+        try {
+            if (wm != null) {
+                WindowManager.LayoutParams lp = (WindowManager.LayoutParams) view.getLayoutParams();
+                lp.width = f ? ViewGroup.LayoutParams.MATCH_PARENT : w;
+                lp.height = f ? ViewGroup.LayoutParams.MATCH_PARENT : h;
+                lp.x = m;
+                lp.y = m;
+                wm.updateViewLayout(view, lp);
+            } else {
+                FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) view.getLayoutParams();
+                lp.width = f ? ViewGroup.LayoutParams.MATCH_PARENT : w;
+                lp.height = f ? ViewGroup.LayoutParams.MATCH_PARENT : h;
+                lp.setMargins(m, m, m, m);
+                view.setLayoutParams(lp);
+            }
+        } catch (RuntimeException ignored) {}
     }
 
     void detach() {
