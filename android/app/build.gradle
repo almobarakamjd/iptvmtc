@@ -19,8 +19,8 @@ android {
         applicationId 'com.smarttvplus.iptvmtc'
         minSdk 26          // أندرويد 8 فأعلى: مكتبة Claude تتطلبه (كان 21). MTC أندرويد 9 وTCL أندرويد 12
         targetSdk 34
-        versionCode 28
-        versionName '1.7.12'
+        versionCode 29
+        versionName '1.7.13'
         buildConfigField 'String', 'ANTHROPIC_API_KEY', '"' + aiKey + '"'
     }
 

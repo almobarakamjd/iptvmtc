@@ -1,15 +1,15 @@
 {
   "mytv": {
-    "versionCode": 28,
-    "versionName": "1.7.12",
+    "versionCode": 29,
+    "versionName": "1.7.13",
     "url": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/SmartTVPlus.apk",
-    "notes": "المساعد الذكي: فحص الأخطاء ومحادثة بالكتابة أو بالصوت وتحكم بالتلفاز. وتشغيل النافذة الصغيرة وإطفاؤها من المشغّل.",
+    "notes": "المساعد يشغّل القنوات والأفلام والمسلسلات بالاسم، ويقلّب القنوات (التالية والسابقة)، ويبدّل الاشتراك.",
     "mobileUrl": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/myTvMobile.apk"
   },
   "player": {
-    "versionCode": 14,
-    "versionName": "1.5.6",
+    "versionCode": 15,
+    "versionName": "1.5.7",
     "url": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/PlayerPlus.apk",
-    "notes": "تشغيل النافذة الصغيرة وإطفاؤها من القائمة، ومحاولة تشغيل الفيديو والنافذة تعمل."
+    "notes": "يبلّغ myTv+ بالقناة المعروضة ليقلّب المساعد منها."
   }
 }
