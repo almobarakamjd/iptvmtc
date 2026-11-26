@@ -33,6 +33,9 @@ final class RemoteLog {
     private static final int MAX_PENDING = 600;
 
     private static final List<JSONObject> pending = new ArrayList<>();
+    /** آخر الأسطر محلياً (لا تُمسح عند الرفع): يقرؤها «المساعد الذكي» {@link AiDoctor} */
+    private static final int MAX_RECENT = 500;
+    private static final java.util.ArrayDeque<String> recent = new java.util.ArrayDeque<>();
     private static final ExecutorService io = Executors.newSingleThreadExecutor();
     private static volatile String device = "?";
     private static volatile String ver = "?";
@@ -53,6 +56,15 @@ final class RemoteLog {
 
     static void log(String tag, String msg) {
         Log.d(TAG, tag + ": " + msg);
+        if (!"ai".equals(tag)) {
+            String line = new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(new java.util.Date())
+                    + " " + tag + ": " + (msg.length() > 1500 ? msg.substring(0, 1500) + "…" : msg);
+            synchronized (recent) {
+                if (recent.size() >= MAX_RECENT) recent.removeFirst();
+                recent.addLast(line);
+            }
+        }
+        AiDoctor.observe(tag, msg);
         try {
             JSONObject o = new JSONObject();
             o.put("t", System.currentTimeMillis());
@@ -69,6 +81,17 @@ final class RemoteLog {
                 send();
             });
         } catch (Exception ignored) {}
+    }
+
+    /** آخر n سطراً من السجلّ المحلي (الأقدم أولاً)، مصفّاة بنص إن أُعطي */
+    static String recent(int n, String contains) {
+        List<String> out = new ArrayList<>();
+        synchronized (recent) {
+            for (String l : recent) if (contains == null || contains.length() == 0 || l.contains(contains)) out.add(l);
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = Math.max(0, out.size() - n); i < out.size(); i++) sb.append(out.get(i)).append('\n');
+        return sb.length() > 0 ? sb.toString() : "(لا أسطر)";
     }
 
     /** رفع فوري لما تجمّع (عند مغادرة الواجهة) */

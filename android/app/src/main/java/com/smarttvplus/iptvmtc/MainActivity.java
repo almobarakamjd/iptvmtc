@@ -37,6 +37,16 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         FloatFrame.app = getApplicationContext();
+        current = this;
+        AiDoctor.init(this);
+        watchCrashes();
+        try {
+            android.content.IntentFilter f = new android.content.IntentFilter(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
+            if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(homeWatcher, f, Context.RECEIVER_EXPORTED);
+            else registerReceiver(homeWatcher, f);
+        } catch (Exception e) {
+            RemoteLog.log("app", "homeWatcher failed: " + e);
+        }
         RemoteLog.init(this);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -57,6 +67,10 @@ public class MainActivity extends Activity {
             @Override
             public boolean onConsoleMessage(ConsoleMessage cm) {
                 Log.d("WebConsole", cm.message() + " -- " + cm.sourceId() + ":" + cm.lineNumber());
+                if (cm.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                    String src = String.valueOf(cm.sourceId());
+                    RemoteLog.log("jserr", cm.message() + " @ " + src.substring(src.lastIndexOf('/') + 1) + ":" + cm.lineNumber());
+                }
                 return true;
             }
         });
@@ -66,6 +80,7 @@ public class MainActivity extends Activity {
         web.addJavascriptInterface(new StorageBridge(), "AndroidStorage");
         web.addJavascriptInterface(new SystemBridge(), "AndroidSystem");
         web.addJavascriptInterface(new HdmiBridge(), "AndroidHdmi");
+        web.addJavascriptInterface(new AiBridge(), "AndroidAi");
 
         startDiagnosticPingServer(); // تشخيص مؤقت: نتأكد هل المشكلة خاصة بخدمة الإتاحة أم عامة بالشبكة/التلفاز
 
@@ -434,6 +449,100 @@ public class MainActivity extends Activity {
         }
     }
 
+    /* ---------- المساعد الذكي (AiDoctor) ---------- */
+
+    private static volatile MainActivity current;
+
+    /** جسر شاشة «المساعد الذكي» */
+    private class AiBridge {
+        @JavascriptInterface
+        public String state() { return AiDoctor.stateJson(); }
+
+        /** mode: check (فحص عام) أو ask (سؤال). يعيد نصاً فارغاً إن بدأ، أو سبب الرفض. */
+        @JavascriptInterface
+        public String start(String mode, String question) { return AiDoctor.start(mode, question); }
+
+        @JavascriptInterface
+        public void setAuto(boolean on) { AiDoctor.setAuto(on); }
+
+        @JavascriptInterface
+        public void clearNotes() { AiDoctor.clearNotes(); }
+
+        /** سطر من الواجهة إلى السجلّ بوسمه: toast لما رآه المستخدم، neterr لفشل الاتصال، jserr لخطأ الواجهة */
+        @JavascriptInterface
+        public void note(String tag, String msg) { RemoteLog.log(tag, msg); }
+    }
+
+    /** تغيّرت حالة المساعد (بدأ، خطوة جديدة، انتهى): تُبلَّغ الواجهة إن كانت حيّة */
+    static void notifyAi() {
+        final MainActivity a = current;
+        if (a == null) return;
+        a.runOnUiThread(() -> {
+            if (a.web != null && !a.isDestroyed())
+                a.web.evaluateJavascript("if(window.__onAiState)window.__onAiState();", null);
+        });
+    }
+
+    /**
+     * ينفّذ تعبير JS يعيد نصاً، من خيط خلفي، وينتظر ناتجه (حتى 6 ثوانٍ). أدوات المساعد التي تقرأ حالة
+     * الواجهة أو تغيّر إعداداتها تمرّ من هنا. يرمي إن كانت الواجهة مغلقة.
+     */
+    static String callJs(final String expr) throws Exception {
+        final MainActivity a = current;
+        if (a == null || a.web == null || a.isDestroyed()) throw new Exception("واجهة التطبيق مغلقة الآن");
+        final String[] out = new String[1];
+        final java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+        a.runOnUiThread(() -> {
+            try {
+                a.web.evaluateJavascript("(function(){try{return String(" + expr + ");}catch(e){return 'JSERR '+e;}})()", v -> {
+                    out[0] = v;
+                    done.countDown();
+                });
+            } catch (Exception e) {
+                done.countDown();
+            }
+        });
+        if (!done.await(6, java.util.concurrent.TimeUnit.SECONDS) || out[0] == null) throw new Exception("الواجهة لم تردّ");
+        Object v = new org.json.JSONTokener(out[0]).nextValue();   // الناتج نص JSON بين علامتي تنصيص
+        String s = String.valueOf(v);
+        if (s.startsWith("JSERR ")) throw new Exception(s);
+        return s;
+    }
+
+    /** انهيار غير ملتقَط: يُكتب في ملف، ويدخل السجلّ عند الفتح التالي ليدرسه المساعد */
+    private void watchCrashes() {
+        final File f = new File(getFilesDir(), "last_crash.txt");
+        try {
+            if (f.exists()) {
+                byte[] buf = new byte[(int) Math.min(f.length(), 6000)];
+                FileInputStream in = new FileInputStream(f);
+                int n = in.read(buf);
+                in.close();
+                f.delete();
+                if (n > 0) RemoteLog.log("crash", "previous run crashed:\n" + new String(buf, 0, n, "UTF-8"));
+            }
+        } catch (Exception ignored) {}
+        final Thread.UncaughtExceptionHandler old = Thread.getDefaultUncaughtExceptionHandler();
+        if (old instanceof CrashSaver) return;
+        Thread.setDefaultUncaughtExceptionHandler(new CrashSaver(f, old));
+    }
+
+    private static final class CrashSaver implements Thread.UncaughtExceptionHandler {
+        private final File file;
+        private final Thread.UncaughtExceptionHandler next;
+
+        CrashSaver(File file, Thread.UncaughtExceptionHandler next) { this.file = file; this.next = next; }
+
+        @Override public void uncaughtException(Thread t, Throwable e) {
+            try {
+                FileOutputStream out = new FileOutputStream(file);
+                out.write(("thread=" + t.getName() + "\n" + Log.getStackTraceString(e)).getBytes("UTF-8"));
+                out.close();
+            } catch (Exception ignored) {}
+            if (next != null) next.uncaughtException(t, e);
+        }
+    }
+
     /** يرسل ضغطة زر إلى الويب برقم مفاتيح سامسونج الذي يفهمه app.js */
     private void sendJsKey(int keyCode) {
         String js = "(function(){var e=new KeyboardEvent('keydown',{bubbles:true});"
@@ -496,30 +605,65 @@ public class MainActivity extends Activity {
     private volatile boolean resumed;
 
     /**
-     * على TCL (سجلّ 2026-11-26): بعد التوليف على HDMI بأقل من ثانيتين يفتح تطبيق التلفاز نفسه
-     * (com.tcl.tv/com.tcl.player.TVActivity) بملء الشاشة فوقنا. وحين عاد المستخدم يدوياً بقيت النافذة
-     * تعرض المدخل ولم يتكرر الانتزاع. فنعود نحن تلقائياً: إن غادرنا الواجهة خلال 4 ثوانٍ من التوليف
-     * بلا طلب منا، نعيد نشاطنا للأمام (مرتين على الأكثر لكل توليف حتى لا ندور).
+     * على TCL (سجلّ 2026-11-26): تطبيق التلفاز نفسه (com.tcl.tv/com.tcl.player.TVActivity) يفتح بملء
+     * الشاشة فوقنا ما دامت نافذة HDMI تعمل: غالباً بعد التوليف بأقل من ثانيتين، وأحياناً بعده بنصف
+     * دقيقة (02:19:32). وحين نعود للواجهة تعود الصورة إلى النافذة وتبقى. فنعود تلقائياً كلما غادرنا
+     * الواجهة والنافذة تعمل، إلا إن كانت المغادرة منا (فتح المشغّل أو أي نشاط نبدؤه) أو بزر الرئيسية.
+     * إن كانت خدمة الإتاحة تعمل فالحكم دقيق: لا نعود إلا إن كان الذي في الواجهة تطبيق التلفاز.
+     * والحدّ 4 عودات في الدقيقة حتى لا ندور.
      */
+    private static final String TCL_TV = "com.tcl.tv";
+    private long homeAt;
+    private final long[] returnTimes = new long[4];
+    private int returnIdx;
+
+    private final android.content.BroadcastReceiver homeWatcher = new android.content.BroadcastReceiver() {
+        @Override public void onReceive(Context c, Intent in) {
+            String reason = in.getStringExtra("reason");
+            RemoteLog.log("app", "closeSystemDialogs reason=" + reason);
+            if ("homekey".equals(reason) || "recentapps".equals(reason) || "assist".equals(reason)) {
+                homeAt = android.os.SystemClock.elapsedRealtime();
+            }
+        }
+    };
+
+    @Override
+    public void startActivityForResult(Intent intent, int requestCode, Bundle options) {
+        HdmiWindow.selfLeaveAt = android.os.SystemClock.elapsedRealtime();   // مغادرة منا لا انتزاع
+        super.startActivityForResult(intent, requestCode, options);
+    }
+
+    @Override
+    protected void onUserLeaveHint() {
+        RemoteLog.log("app", "onUserLeaveHint");
+        super.onUserLeaveHint();
+    }
+
     private void returnIfSnatched() {
         if (isFinishing()) return;
-        long now = android.os.SystemClock.elapsedRealtime();
-        if (!HdmiWindow.get(this).isShown()) return;
-        if (now - HdmiWindow.lastTuneAt > 4000 || now - HdmiWindow.selfLeaveAt < 4000) return;
-        if (HdmiWindow.returnsAfterTune >= 2) return;
-        HdmiWindow.returnsAfterTune++;
+        if (!HdmiWindow.get(this).isRealShown()) return;
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-            if (resumed) return;
-            String fg = RemoteKeyAccessibilityService.instance != null
-                    ? RemoteKeyAccessibilityService.instance.getForegroundPackage() : "?";
-            RemoteLog.log("app", "snatched after tune by " + fg + " -> returning to front");
+            if (resumed || isFinishing() || isDestroyed()) return;
+            if (!HdmiWindow.get(this).isRealShown()) return;
+            long now = android.os.SystemClock.elapsedRealtime();
+            RemoteKeyAccessibilityService svc = RemoteKeyAccessibilityService.instance;
+            String fg = svc != null ? svc.getForegroundPackage() : "?";
+            boolean self = now - HdmiWindow.selfLeaveAt < 5000;
+            boolean home = now - homeAt < 5000;
+            boolean snatched = svc != null ? TCL_TV.equals(fg) : (!self && !home);
+            long oldest = returnTimes[returnIdx];
+            boolean tooMany = oldest != 0 && now - oldest < 60000;
+            RemoteLog.log("app", "left front: fg=" + fg + " self=" + self + " home=" + home
+                    + " sinceTune=" + (now - HdmiWindow.lastTuneAt) + " -> "
+                    + (!snatched ? "stay away" : tooMany ? "too many returns" : "return"));
+            if (!snatched || tooMany) return;
+            returnTimes[returnIdx] = now;
+            returnIdx = (returnIdx + 1) % returnTimes.length;
             try {
                 Intent i = new Intent(this, MainActivity.class)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
                                 | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                Context c = RemoteKeyAccessibilityService.instance != null
-                        ? RemoteKeyAccessibilityService.instance : getApplicationContext();
-                c.startActivity(i);
+                (svc != null ? svc : getApplicationContext()).startActivity(i);
             } catch (Exception e) {
                 RemoteLog.log("app", "return failed: " + e);
             }
@@ -539,6 +683,8 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        try { unregisterReceiver(homeWatcher); } catch (Exception ignored) {}
+        if (current == this) current = null;
         HdmiWindow.get(this).hide();
         ChannelWindow.get().hide();
         if (web != null) web.destroy();

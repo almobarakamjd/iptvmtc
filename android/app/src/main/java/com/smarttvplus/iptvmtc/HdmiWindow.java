@@ -39,7 +39,6 @@ final class HdmiWindow {
     static volatile boolean offByPlayer;
     /** وقت آخر توليف على مدخل حقيقي، وكم مرة أعدنا أنفسنا للواجهة بعده (انظر MainActivity.onPause) */
     static volatile long lastTuneAt;
-    static volatile int returnsAfterTune;
     /** وقت آخر مغادرة بدأناها نحن (تشغيل فيلم): ليست انتزاعاً */
     static volatile long selfLeaveAt;
 
@@ -92,6 +91,9 @@ final class HdmiWindow {
 
     boolean isShown() { return frame != null; }
 
+    /** ظاهرة على مدخل حقيقي (لا الصورة الافتراضية) */
+    boolean isRealShown() { return frame != null && tv != null; }
+
     /** ظاهرة فوق التطبيقات الأخرى فعلاً (لا داخل نشاط myTv+ فقط) */
     boolean isFloating() { return frame != null && frame.isFloating(); }
 
@@ -138,7 +140,6 @@ final class HdmiWindow {
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
                 tv.tune(inputId, TvContract.buildChannelUriForPassthroughInput(inputId));
                 lastTuneAt = android.os.SystemClock.elapsedRealtime();
-                returnsAfterTune = 0;
             } catch (Throwable t) {
                 Log.w(TAG, "tune failed: " + inputId, t);
                 RemoteLog.log("hdmi", "tune failed: " + t);

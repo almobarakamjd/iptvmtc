@@ -1,6 +1,12 @@
 apply plugin: 'com.android.application'
 
 // مفتاح التوقيع الثابت (خارج المستودع) — التوقيع بمفتاح debug كان يجعل Play Protect يحظر التثبيت
+// مفتاح Claude لـ«المساعد الذكي»: المصدر نفسه الذي يُبنى به Player+ (خارج المستودع)، أو متغير البيئة
+def aiProps = new Properties()
+def aiFile = rootProject.file('../../movie_player/secrets.properties')
+if (aiFile.exists()) aiFile.withInputStream { aiProps.load(it) }
+def aiKey = aiProps.getProperty('ANTHROPIC_API_KEY') ?: (System.getenv('ANTHROPIC_API_KEY') ?: '')
+
 def ksProps = new Properties()
 def ksFile = new File(System.getProperty('user.home'), 'keystores/oqod-release.properties')
 if (ksFile.exists()) ksFile.withInputStream { ksProps.load(it) }
@@ -11,10 +17,11 @@ android {
 
     defaultConfig {
         applicationId 'com.smarttvplus.iptvmtc'
-        minSdk 21          // أندرويد 5.0 فأعلى — يغطي أجهزة MTC والبوكسات القديمة
+        minSdk 26          // أندرويد 8 فأعلى: مكتبة Claude تتطلبه (كان 21). MTC أندرويد 9 وTCL أندرويد 12
         targetSdk 34
-        versionCode 27
-        versionName '1.7.11'
+        versionCode 28
+        versionName '1.7.12'
+        buildConfigField 'String', 'ANTHROPIC_API_KEY', '"' + aiKey + '"'
     }
 
     buildFeatures { buildConfig true }
@@ -51,4 +58,17 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
+
+    packaging {
+        resources {
+            excludes += ['META-INF/*.kotlin_module', 'META-INF/versions/**', 'META-INF/DEPENDENCIES',
+                         'META-INF/LICENSE*', 'META-INF/NOTICE*']
+        }
+    }
+}
+
+dependencies {
+    // «المساعد الذكي» (AiDoctor): النسخة نفسها التي يعمل بها Player+ على الأجهزة
+    implementation 'com.anthropic:anthropic-java:2.63.0'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 }

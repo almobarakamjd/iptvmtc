@@ -40,6 +40,7 @@
   function toast(msg, ms) {
     var t = $('toast');
     t.textContent = msg;
+    aiNote('toast', msg);
     t.classList.remove('hidden');
     clearTimeout(t._tm);
     t._tm = setTimeout(function () { t.classList.add('hidden'); }, ms || 2500);
@@ -298,6 +299,13 @@
           }
         }
       ]);
+    }
+    if (aiAvailable()) {
+      var aiSt = aiState(), aiLast = (aiSt.history || [])[0];
+      entries.push(['🤖 المساعد الذكي <span class="sub">' +
+        (aiSt.running ? '⏳ يعمل الآن: ' + esc(aiSt.step || '')
+          : aiLast ? 'آخر فحص ' + aiWhen(aiLast.t) : 'يدرس أخطاء التطبيق ويعالجها') + '</span>',
+        function () { openAi(homeScreen); }]);
     }
     var menuEls = entries.map(function (e) { var el = makeItem(e[0]); box.appendChild(el); return el; });
     var actions = entries.map(function (e) { return e[1]; });
@@ -2243,6 +2251,12 @@
     box.appendChild(add); els.push(add);
     actions.push(function () { openForm(null); });
 
+    if (aiAvailable()) {
+      var aiEl = makeItem('🤖 المساعد الذكي <span class="sub">يدرس أخطاء التطبيق ويعالجها</span>');
+      box.appendChild(aiEl); els.push(aiEl);
+      actions.push(function () { openAi(renderSettings); });
+    }
+
     var bucketSub = Cloud.hasBucket() ? ' <span class="sub">رمز جهازك: ' + esc(Cloud.getBucketId()) + '</span>' : '';
     var backupEl = makeItem('☁️ نسخ احتياطي أونلاين (مشفّر)' + bucketSub);
     box.appendChild(backupEl); els.push(backupEl);
@@ -2357,7 +2371,7 @@
       input: c.input || '',
       corner: c.corner >= 0 && c.corner < HDMI_CORNERS.length ? c.corner : 1,
       size: HDMI_SIZES.indexOf(c.size) >= 0 ? c.size : 33,
-      sound: !!c.sound   // مكتومة افتراضياً: الصوت المسموع (1.7.8) أخرج تلفاز TCL إلى المدخل بملء الشاشة
+      sound: c.sound !== false   // مسموعة افتراضياً (طلب أبي فيصل)، وتُكتم حين يعمل المشغّل. كانت مكتومة في 1.7.9-1.7.11: مكتومة افتراضياً: الصوت المسموع (1.7.8) أخرج تلفاز TCL إلى المدخل بملء الشاشة
     };
   }
 
@@ -2991,6 +3005,224 @@
       case 10252: case 415: case 19: Player.togglePause(); break;            // تشغيل/إيقاف
       case 403: case 70: redButton(); break;                                 // الزر الأحمر أو F: مفضلة/حذف
     }
+  });
+
+  /* ---------- المساعد الذكي (AiDoctor في أندرويد) ----------
+     الفحص يجري في الخلفية ويملكه أندرويد لا هذه الشاشة: تبدؤه وتغادر، وتعود فتجد التقرير.
+     AiTools: ما يقرؤه المساعد من حالة الواجهة وما يُسمح له بتغييره (إعدادات فقط). */
+
+  /* حفظ إعداد نافذة HDMI بلا رسم شاشة الإعدادات (hdmiSave يرسمها): المساعد يعمل في الخلفية
+     والمستخدم قد يكون في أي شاشة، فلا تُنتزع منه. تُحدَّث الإعدادات فقط إن كانت هي المعروضة. */
+  function aiSaveHdmi(c) {
+    try { localStorage.setItem(HDMI_KEY, JSON.stringify(c)); } catch (e) {}
+    hdmiApply();
+    floatChApply();
+    if (!$('screen-settings').classList.contains('hidden')) { hdmiKeepFocus = true; renderSettings(); }
+  }
+
+  function aiAvailable() { return typeof AndroidAi !== 'undefined'; }
+
+  function aiState() {
+    try { return JSON.parse(AndroidAi.state()); } catch (e) { return { history: [], notes: [] }; }
+  }
+
+  function aiNote(tag, msg) {
+    try { if (aiAvailable()) AndroidAi.note(tag, String(msg)); } catch (e) {}
+  }
+
+  function aiWhen(t) {
+    var d = new Date(t);
+    function p2(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+  }
+
+  var AI_FIX_NAMES = {
+    hdmi_window_off: 'إطفاء نافذة HDMI', hdmi_sound_off: 'كتم صوت نافذة HDMI', hdmi_sound_on: 'إسماع صوت نافذة HDMI',
+    float_channel_off: 'إغلاق نافذة القناة العائمة', clear_cache: 'مسح القوائم المخزّنة', reload_ui: 'إعادة تحميل الواجهة',
+    check_updates: 'فحص التحديثات', page_size_100: 'عدد البطاقات 100', page_size_200: 'عدد البطاقات 200'
+  };
+
+  function aiFixName(a) {
+    if (AI_FIX_NAMES[a]) return AI_FIX_NAMES[a];
+    var m = /^player_(live|movie)_(playerplus|vlc|mx)$/.exec(a);
+    if (m) return (m[1] === 'live' ? 'مشغّل القنوات: ' : 'مشغّل الأفلام: ') + { playerplus: 'Player+', vlc: 'VLC', mx: 'MX Player' }[m[2]];
+    return a;
+  }
+
+  function openAi(backFn) {
+    screenStack.push(backFn);
+    renderAi();
+  }
+
+  function renderAi(keepFocus) {
+    show('screen-ai');
+    var st = aiState(), box = $('ai-list');
+    box.innerHTML = '';
+    var els = [], actions = [];
+    function add(html, fn, cls) {
+      var el = makeItem(html, cls);
+      box.appendChild(el); els.push(el); actions.push(fn || function () {});
+    }
+    function start(mode, q) {
+      var err = AndroidAi.start(mode, q || '');
+      if (err) toast(err, 5000);
+      else toast('🤖 بدأ الفحص في الخلفية — تابع استعمال التطبيق، ويصلك إشعار عند انتهائه', 6000);
+      renderAi();
+    }
+    if (!st.hasKey) {
+      add('⚠️ هذه النسخة بُنيت بلا مفتاح الذكاء الاصطناعي <span class="sub">المساعد لا يعمل فيها</span>');
+    } else if (st.running) {
+      add('⏳ المساعد يعمل الآن في الخلفية <span class="sub">' + esc(st.step || '') + ' — يمكنك مغادرة هذه الشاشة</span>');
+    } else {
+      add('🔍 افحص التطبيق الآن <span class="sub">يدرس السجلّ والشبكة والاشتراك ويكتب تقريراً</span>',
+        function () { start('check'); });
+      add('💬 اسأل المساعد أو صِف المشكلة', function () {
+        promptInput(null, '', 'اكتب سؤالك أو صِف ما حدث…', function (v) {
+          if (v) start('ask', v); else renderAi();
+        });
+      });
+    }
+    add('🔁 الفحص التلقائي عند الأخطاء: <span class="sub">' +
+      (st.auto ? 'مفعّل (4 مرات في اليوم على الأكثر)' : 'متوقف') + '</span>',
+      function () { AndroidAi.setAuto(!st.auto); renderAi(true); });
+
+    var last = (st.history || [])[0];
+    if (last) {
+      add('📄 آخر تقرير: <span class="sub">' + aiWhen(last.t) +
+        (last.mode === 'auto' ? ' — فحص تلقائي' : last.mode === 'ask' ? ' — سؤال' : ' — فحص يدوي') + '</span>', null, 'ai-head');
+      if (last.question) add(esc((last.mode === 'auto' ? 'السبب: ' : 'السؤال: ') + last.question), null, 'ai-line ai-q');
+      String(last.error ? '⚠️ ' + last.error : last.report).split('\n').forEach(function (ln) {
+        if (ln.trim()) add(esc(ln), null, 'ai-line');
+      });
+      (last.actions || []).forEach(function (a) {
+        add('🔧 طبّق المساعد: ' + esc(aiFixName(a.action)) +
+          ' <span class="sub">' + esc(a.reason || '') + ' — ' + esc(a.result || '') + '</span>', null, 'ai-line');
+      });
+    }
+    if ((st.history || []).length > 1) {
+      add('🗂 تقارير أقدم (' + (st.history.length - 1) + ')', null, 'ai-head');
+      st.history.slice(1).forEach(function (h) {
+        var first = String(h.error || h.report || '').split('\n')[0];
+        add(esc(aiWhen(h.t) + ' — ' + first), null, 'ai-line');
+      });
+    }
+    if ((st.notes || []).length) {
+      add('🧠 ما تعلّمه المساعد عن هذا الجهاز (' + st.notes.length + ') <span class="sub">موافق لمسحه</span>',
+        function () { AndroidAi.clearNotes(); toast('مُسحت الدروس'); renderAi(true); }, 'ai-head');
+      st.notes.forEach(function (n) { add('• ' + esc(n), null, 'ai-line'); });
+    }
+    var keep = focus.idx;
+    setFocusList(els, function (idx) { actions[idx](); });
+    if (keepFocus && keep < els.length) { focus.idx = keep; paintFocus(); }
+  }
+
+  /* ينادى من أندرويد كلما تغيّرت حالة المساعد: خطوة جديدة أو انتهاء */
+  var aiWasRunning = false;
+  window.__onAiState = function () {
+    var st = aiState();
+    var onAi = !$('screen-ai').classList.contains('hidden');
+    if (aiWasRunning && !st.running) {
+      var last = (st.history || [])[0] || {};
+      toast(last.error ? '🤖 تعذّر الفحص: ' + last.error
+        : '🤖 انتهى المساعد' + ((last.actions || []).length ? ' وطبّق ' + last.actions.length + ' إصلاحاً' : '') +
+          (onAi ? '' : ' — التقرير في «المساعد الذكي»'), 7000);
+    }
+    aiWasRunning = !!st.running;
+    if (onAi && !kb.open) renderAi(true);
+    else if (!$('screen-home').classList.contains('hidden') && !confirmDialog.open && !st.running) homeScreen();
+  };
+
+  window.AiTools = {
+    /* لقطة من حالة الواجهة وإعداداتها (بلا بيانات دخول) */
+    state: function () {
+      var vis = document.querySelector('.screen:not(.hidden)');
+      var o = {
+        screen: vis ? vis.id : '',
+        profile: current ? { name: current.name, host: current.host, singleConnection: !!current.singleConnection } : null,
+        profilesCount: profiles.length,
+        hiddenUser: UserSync.active(),
+        players: {}, pageSize: Storage.getPageSize(), autoSubtitles: Storage.getAutoSubtitles()
+      };
+      PLAYER_KIND_ORDER.forEach(function (k) { o.players[k] = PLAYER_CHOICE_NAMES[effectivePlayer(k)]; });
+      try { o.playerPlusVersion = AndroidSystem.playerVersion() || 'غير مثبّت'; } catch (e) {}
+      try { o.remoteZapService = AndroidSystem.isRemoteZapEnabled(); } catch (e) {}
+      if (typeof AndroidHdmi !== 'undefined') {
+        try {
+          o.hdmiWindow = hdmiCfg();
+          o.hdmiInputs = hdmiInputs();
+          o.windowsCanFloat = AndroidHdmi.canFloat();
+          o.overlayPermission = AndroidHdmi.canOverlay();
+          var fc = floatChCfg();
+          o.floatChannel = { on: fc.on, playing: fc.title || '' };
+        } catch (e) {}
+      }
+      if (!$('screen-browse').classList.contains('hidden')) {
+        o.browse = { kind: browse.kind, zone: browse.zone, items: (browse.items || []).length };
+      }
+      return JSON.stringify(o);
+    },
+
+    /* كل ما يجب حجبه عن النموذج: أسماء المستخدمين وكلمات المرور لكل الاشتراكات */
+    secrets: function () {
+      var out = [];
+      profiles.forEach(function (p) {
+        [p.username, p.password].forEach(function (v) {
+          if (!v) return;
+          out.push(String(v));
+          if (encodeURIComponent(v) !== String(v)) out.push(encodeURIComponent(v));
+        });
+      });
+      return JSON.stringify(out);
+    },
+
+    /* بيانات الاشتراك المفتوح لأداة check_subscription (تبقى في الجهاز ولا تصل النموذج).
+       الاشتراك الثالث (ownerOnly) لا يُفحص آلياً أبداً: أمر أبي فيصل 2026-11-15. */
+    creds: function () {
+      if (!current) return JSON.stringify({ refuse: 'لا اشتراك مفتوح الآن؛ يفتح المستخدم اشتراكاً ثم يُعاد الفحص' });
+      if (current.ownerOnly) return JSON.stringify({ refuse: 'هذا الاشتراك مستثنى من الفحص الآلي بأمر صاحبه' });
+      return JSON.stringify({ name: current.name, host: current.host, username: current.username, password: current.password });
+    },
+
+    /* إصلاح واحد من القائمة المسموحة (AiDoctor.FIXES). يعيد وصف ما حدث. */
+    fix: function (action) {
+      var hc, pkg;
+      switch (action) {
+        case 'hdmi_window_off':
+          hc = hdmiCfg();
+          if (!hc.on) return 'نافذة HDMI مطفأة أصلاً';
+          hc.on = false; aiSaveHdmi(hc); return 'أُطفئت نافذة HDMI';
+        case 'hdmi_sound_off': case 'hdmi_sound_on':
+          hc = hdmiCfg(); hc.sound = action === 'hdmi_sound_on'; aiSaveHdmi(hc);
+          return hc.sound ? 'صوت نافذة HDMI مسموع' : 'كُتم صوت نافذة HDMI';
+        case 'float_channel_off':
+          floatChStop(); floatChApply(); return 'أُغلقت نافذة القناة العائمة';
+        case 'page_size_100': case 'page_size_200':
+          Storage.setPageSize(action === 'page_size_100' ? 100 : 200); return 'عدد البطاقات: ' + Storage.getPageSize();
+        case 'clear_cache':
+          searchCache = {}; return 'مُسحت القوائم المخزّنة في الذاكرة';
+        case 'reload_ui':
+          setTimeout(function () { location.reload(); }, 1500); return 'تُعاد الواجهة بعد ثانية ونصف';
+        case 'check_updates':
+          AndroidSystem.checkUpdates(); return 'بدأ فحص التحديثات';
+      }
+      var m = /^player_(live|movie)_(playerplus|vlc|mx)$/.exec(action);
+      if (m) {
+        pkg = { playerplus: OUR_PLAYER, vlc: 'org.videolan.vlc', mx: 'com.mxtech.videoplayer.ad' }[m[2]];
+        if (!AndroidOpen.isInstalled(pkg)) return 'لم يُطبَّق: ' + PLAYER_CHOICE_NAMES[pkg] + ' غير مثبّت على الجهاز';
+        Storage.setPreferredPlayer(m[1], pkg);
+        return PLAYER_KIND_LABELS[m[1]] + ': ' + PLAYER_CHOICE_NAMES[pkg];
+      }
+      return 'إصلاح غير معروف';
+    }
+  };
+
+  // أخطاء الواجهة غير الملتقَطة تدخل السجلّ بوسم jserr فيدرسها المساعد
+  window.addEventListener('error', function (ev) {
+    var f = String(ev.filename || '');
+    aiNote('jserr', (ev.message || 'error') + ' @ ' + f.substring(f.lastIndexOf('/') + 1) + ':' + (ev.lineno || 0));
+  });
+  window.addEventListener('unhandledrejection', function (ev) {
+    aiNote('jserr', 'unhandled rejection: ' + (ev.reason && ev.reason.message ? ev.reason.message : ev.reason));
   });
 
   /* ---------- البداية ----------

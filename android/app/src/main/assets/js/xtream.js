@@ -8,11 +8,26 @@ var Xtream = (function () {
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
     xhr.timeout = timeoutMs || 30000;
+    // فشل الطلب يدخل سجلّ التشخيص بوسم neterr (بلا بيانات الدخول) ليدرسه «المساعد الذكي»
+    function note(what) {
+      try {
+        if (typeof AndroidAi !== 'undefined') AndroidAi.note('neterr', 'xtream ' + (action || 'account') + ' ' + what +
+          ' host=' + profile.host + ' http=' + xhr.status + ' after=' + (Date.now() - t0) + 'ms');
+      } catch (e) {}
+    }
+    var t0 = Date.now();
     xhr.onload = function () {
-      try { cb(JSON.parse(xhr.responseText)); }
-      catch (e) { errCb && errCb('رد غير مفهوم من السيرفر — قد تكون المكتبة كبيرة جداً على ذاكرة الجهاز'); }
+      var data;
+      try { data = JSON.parse(xhr.responseText); }
+      catch (e) {
+        note('bad response len=' + (xhr.responseText || '').length);
+        errCb && errCb('رد غير مفهوم من السيرفر — قد تكون المكتبة كبيرة جداً على ذاكرة الجهاز');
+        return;
+      }
+      cb(data);
     };
-    xhr.onerror = xhr.ontimeout = function () { errCb && errCb('تعذر الاتصال بالسيرفر (أو استغرق وقتاً طويلاً جداً)'); };
+    xhr.onerror = function () { note('connection error'); errCb && errCb('تعذر الاتصال بالسيرفر (أو استغرق وقتاً طويلاً جداً)'); };
+    xhr.ontimeout = function () { note('timeout'); errCb && errCb('تعذر الاتصال بالسيرفر (أو استغرق وقتاً طويلاً جداً)'); };
     xhr.send();
   }
   /* جلب قوائم "الكل" (بلا تصنيف) قد يعيد عشرات آلاف السجلات في بعض الاشتراكات —

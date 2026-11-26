@@ -5,6 +5,10 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- النوافذ المصغّرة فوق المشغّل حين لا تعمل خدمة الإتاحة (TCL بأندرويد 12) -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- «المساعد الذكي»: خدمة أمامية بإشعار ما دام الفحص جارياً (AiService) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- تثبيت Player+ وتحديث التطبيقين من رابط الإصدارات (يطلب موافقة المستخدم كل مرة) -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
@@ -43,6 +47,11 @@
         <receiver
             android:name=".WindowCommandReceiver"
             android:exported="true" />
+
+        <service
+            android:name=".AiService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <receiver
             android:name=".InstallResultReceiver"

@@ -217,3 +217,9 @@ body.touch .item, body.touch .search-box, body.touch .icon-btn {
   -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none;
 }
 body.touch ::-webkit-scrollbar { display: none; }
+
+/* شاشة «المساعد الذكي»: أسطر التقرير أصغر من الأزرار وتلتف */
+#ai-list .item.ai-line { font-size: 27px; padding: 10px 28px; white-space: normal; line-height: 1.5; background: transparent; }
+#ai-list .item.ai-line.ai-q { color: #9fb4d8; }
+#ai-list .item.ai-head { color: #6fb4ff; margin-top: 12px; }
+#ai-list .item.ai-line.focused { background: #1d2a40; }
