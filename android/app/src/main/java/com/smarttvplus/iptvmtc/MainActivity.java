@@ -497,6 +497,13 @@ public class MainActivity extends Activity {
             });
         }
 
+        /** معرّف القناة التي بلّغ Player+ أنه يعرضها (فارغ إن لم يبلّغ منذ آخر تشغيل من myTv+) */
+        @JavascriptInterface
+        public String playerChannel() { return WindowCommandReceiver.playerChannel; }
+
+        @JavascriptInterface
+        public void clearPlayerChannel() { WindowCommandReceiver.playerChannel = ""; }
+
         /** ناتج أداة غير متزامنة (AiTools.media) يعود إلى الخيط المنتظر في callJsAsync */
         @JavascriptInterface
         public void toolResult(String token, String text) {

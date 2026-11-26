@@ -1873,6 +1873,8 @@
 
   function playInOurPlayer(kind, id, ext, name, srcItem) {
     if (kind === 'live') {
+      // قائمة جديدة تُرسل للمشغّل: ما بلّغه عن قناته السابقة لم يعد صالحاً
+      if (aiAvailable() && AndroidAi.clearPlayerChannel) AndroidAi.clearPlayerChannel();
       var hasList = player.channelList && player.channelList.length;
       var list = hasList ? player.channelList : [srcItem || { stream_id: id, name: name }];
       var idx = hasList ? Math.max(0, player.channelIndex) : 0;
@@ -3076,6 +3078,14 @@
   }
 
   var aiChatOpen = false;
+
+  /* إن قلّب المستخدم بالريموت داخل Player+ فقد بلّغنا قناته: يُحدَّث موضعنا في قائمة التقليب منها */
+  function aiSyncChannel() {
+    var cl = player.channelList, sid = '';
+    try { sid = AndroidAi.playerChannel ? AndroidAi.playerChannel() : ''; } catch (e) {}
+    if (!sid || !cl) return;
+    for (var i = 0; i < cl.length; i++) if (String(cl[i].stream_id) === sid) { player.channelIndex = i; return; }
+  }
   var aiCats = {};   // أسماء التصنيفات لبحث المساعد: profileId:kind:cats
 
   function aiStart(mode, q) {
@@ -3247,6 +3257,7 @@
         case 'channel_next':
         case 'channel_previous':
           if (!current) return 'لم يُنفَّذ: لا اشتراك مفتوح';
+          aiSyncChannel();
           var cl = player.channelList;
           if (!cl || !cl.length) return 'لم يُنفَّذ: لم تُشغَّل قناة في هذه الجلسة بعد؛ شغّل قناة باسمها أولاً (find_media ثم play_media)';
           var ci = (Math.max(0, player.channelIndex) + (action === 'channel_next' ? 1 : -1) + cl.length) % cl.length;
@@ -3402,6 +3413,7 @@
 
     /* لقطة من حالة الواجهة وإعداداتها (بلا بيانات دخول) */
     state: function () {
+      aiSyncChannel();
       var vis = document.querySelector('.screen:not(.hidden)');
       var o = {
         screen: vis ? vis.id : '',
