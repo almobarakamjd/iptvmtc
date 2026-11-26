@@ -242,9 +242,7 @@
 
   /* ---------- الشاشة الرئيسية ---------- */
   function openProfile(p) {
-    if (current && current.id !== p.id) purgeOtherProfilesCache(p.id);
-    current = p;
-    loadMaxConns(p);
+    aiSwitchProfile(p);
     // الاشتراك المخفي لا يُحفظ «آخر اشتراك»، فالتطبيق يبدأ ضيفاً ولا يفتح عليه
     if (!p.ownerOnly) Storage.setLastProfile(p.id);
     screenStack = [showProfiles];
@@ -255,6 +253,16 @@
      لاشتراكات غير الاشتراك المفتوح حالياً — بدون هذا، فتح أكثر من اشتراك بنفس الجلسة (خصوصاً
      مع مكتبات كبيرة) يراكم كل القوائم الكاملة بالذاكرة للأبد فتُثقّل التطبيق أو تُسبّب تجمّد/كراش
      على الأجهزة الضعيفة (رام 1GB). عند الرجوع لاشتراك سابق تُعاد القائمة من السيرفر فقط عند الحاجة. */
+  /* تبديل الاشتراك بلا تغيير الشاشة (يستعمله openProfile والمساعد). قائمة التقليب تخص اشتراكها فتُمسح. */
+  function aiSwitchProfile(p) {
+    if (current && current.id !== p.id) {
+      purgeOtherProfilesCache(p.id);
+      if (player) { player.channelList = null; player.channelIndex = -1; }
+    }
+    current = p;
+    loadMaxConns(p);
+  }
+
   function purgeOtherProfilesCache(keepId) {
     Object.keys(searchCache).forEach(function (key) {
       if (key.indexOf(keepId + ':') !== 0) delete searchCache[key];
@@ -3050,7 +3058,8 @@
     volume_up: 'رفع الصوت', volume_down: 'خفض الصوت', volume_set: 'ضبط الصوت', mute: 'كتم الصوت', unmute: 'إلغاء الكتم',
     media_play_pause: 'تشغيل/إيقاف', media_next: 'التالي', media_previous: 'السابق', home: 'الشاشة الرئيسية', back: 'رجوع',
     launch_app: 'فتح تطبيق', open_input: 'التحويل إلى مدخل', window_on: 'تشغيل نافذة HDMI', window_off: 'إطفاء نافذة HDMI',
-    window_corner: 'موضع نافذة HDMI', window_size: 'حجم نافذة HDMI', open_screen: 'فتح شاشة'
+    window_corner: 'موضع نافذة HDMI', window_size: 'حجم نافذة HDMI', open_screen: 'فتح شاشة',
+    channel_next: 'القناة التالية', channel_previous: 'القناة السابقة', open_profile: 'فتح اشتراك', play_media: 'تشغيل'
   };
 
   function aiFixName(a) {
@@ -3067,6 +3076,7 @@
   }
 
   var aiChatOpen = false;
+  var aiCats = {};   // أسماء التصنيفات لبحث المساعد: profileId:kind:cats
 
   function aiStart(mode, q) {
     var err = AndroidAi.start(mode, q || '');
@@ -3105,7 +3115,7 @@
       add('🆕 محادثة جديدة <span class="sub">تمسح هذه الرسائل</span>',
         function () { AndroidAi.clearChat(); renderChat(); });
     }
-    if (!chat.length) add('اكتب أو قل ما تريد: مشكلة تراها، سؤالاً، أو أمراً للتلفاز (مثل: أطفئ نافذة HDMI، ارفع الصوت، افتح يوتيوب).', null, 'ai-line ai-q');
+    if (!chat.length) add('اكتب أو قل ما تريد: مشكلة تراها، سؤالاً، أو أمراً للتلفاز (مثل: شغّل قناة الإخبارية، القناة التالية، دوّر على فيلم كذا، ارفع الصوت، افتح يوتيوب).', null, 'ai-line ai-q');
     // مجموعات: رسالة المستخدم وما تلاها من ردّ، الأحدث أولاً
     var groups = [];
     chat.forEach(function (t) {
@@ -3234,6 +3244,32 @@
         case 'window_size':
           if (HDMI_SIZES.indexOf(n) < 0) return 'لم يُنفَّذ: الحجم 25 أو 33 أو 50';
           hc.size = n; aiSaveHdmi(hc); return 'حجم النافذة: ' + hdmiSizeName(n);
+        case 'channel_next':
+        case 'channel_previous':
+          if (!current) return 'لم يُنفَّذ: لا اشتراك مفتوح';
+          var cl = player.channelList;
+          if (!cl || !cl.length) return 'لم يُنفَّذ: لم تُشغَّل قناة في هذه الجلسة بعد؛ شغّل قناة باسمها أولاً (find_media ثم play_media)';
+          var ci = (Math.max(0, player.channelIndex) + (action === 'channel_next' ? 1 : -1) + cl.length) % cl.length;
+          player.channelIndex = ci;
+          Storage.addRecent(current.id, 'live', cl[ci]);
+          playStream('live', cl[ci].stream_id, null, cl[ci].name, cl[ci]);
+          return 'شُغّلت «' + cl[ci].name + '» (' + (ci + 1) + ' من ' + cl.length + ' في قائمتها)';
+        case 'list_profiles':
+          return visibleProfiles().map(function (p, i) {
+            return (i + 1) + ' | ' + p.name + (current && current.id === p.id ? ' (المفتوح الآن)' : '') + (p.pinHash ? ' (بكلمة مرور)' : '');
+          }).join('\n') || 'لا اشتراكات';
+        case 'open_profile':
+          var vp = visibleProfiles(), want = normName(value);
+          var tp = vp[n - 1] && String(n) === String(value).trim() ? vp[n - 1]
+            : vp.filter(function (p) { return normName(p.name) === want; })[0] ||
+              vp.filter(function (p) { return want && normName(p.name).indexOf(want) >= 0; })[0];
+          if (!tp) return 'لم يُنفَّذ: لا اشتراك بهذا الاسم أو الرقم؛ استعمل list_profiles';
+          if (tp.pinHash) return 'لم يُنفَّذ: «' + tp.name + '» محمي بكلمة مرور؛ يفتحه أبو فيصل بنفسه من شاشة الاشتراكات';
+          if (kb.open) return 'لم يُنفَّذ: لوحة المفاتيح مفتوحة الآن';
+          if (current && current.id === tp.id) return '«' + tp.name + '» هو المفتوح الآن أصلاً';
+          if ($('screen-ai').classList.contains('hidden')) openProfile(tp);
+          else { aiSwitchProfile(tp); if (!tp.ownerOnly) Storage.setLastProfile(tp.id); }
+          return 'فُتح الاشتراك «' + tp.name + '»';
         case 'open_screen':
           if (kb.open) return 'لم يُنفَّذ: لوحة المفاتيح مفتوحة الآن';
           if (value === 'settings') { setTimeout(openSettings, 300); return 'فُتحت الإعدادات'; }
@@ -3251,6 +3287,119 @@
       return 'أمر غير معروف';
     },
 
+    /* البحث في قوائم الاشتراك وتشغيل نتيجته. غير متزامنة (قد تُحمَّل القائمة الكاملة من السيرفر):
+       الناتج يعود إلى جافا عبر AndroidAi.toolResult(token, نص). kind: live أو vod أو series. */
+    media: function (token, action, a1, a2, a3, a4) {
+      var sent = false;
+      function done(s) { if (sent) return; sent = true; try { AndroidAi.toolResult(token, String(s)); } catch (e) {} }
+      try {
+        if (!current) return done('لم يُنفَّذ: لا اشتراك مفتوح؛ يختار المستخدم اشتراكاً أولاً أو استعمل open_profile');
+        var prof = current;
+        var KN = { live: 'قناة', vod: 'فيلم', series: 'مسلسل' };
+        var idOf = function (kind, it) { return String(kind === 'series' ? it.series_id : it.stream_id); };
+        // القائمة الكاملة لنوع واحد (من ذاكرة الجلسة إن وُجدت) مع أسماء تصنيفاتها
+        var load = function (kind, cb) {
+          var key = prof.id + ':' + kind;
+          var withCats = function (all) {
+            var ck = key + ':cats';
+            if (aiCats[ck]) return cb(filterNames(all, 'name'), aiCats[ck]);
+            var cf = kind === 'live' ? Xtream.liveCategories : kind === 'vod' ? Xtream.vodCategories : Xtream.seriesCategories;
+            cf(prof, function (cats) {
+              var m = {};
+              (cats || []).forEach(function (c) { m[c.category_id] = c.category_name || ''; });
+              aiCats[ck] = m;
+              cb(filterNames(all, 'name'), m);
+            }, function () { cb(filterNames(all, 'name'), {}); });
+          };
+          if (searchCache[key]) return withCats(searchCache[key]);
+          var fn = kind === 'live' ? Xtream.allLive : kind === 'vod' ? Xtream.allVod : Xtream.allSeries;
+          fn(prof, function (all) { searchCache[key] = all || []; withCats(searchCache[key]); },
+            function (e) { done('لم يُنفَّذ: تعذّر تحميل قائمة ' + kind + ' من السيرفر: ' + e); });
+        };
+
+        if (action === 'find') {
+          var tokens = normName(a1).split(' ').filter(Boolean);
+          if (!tokens.length) return done('لم يُنفَّذ: نص البحث فارغ');
+          var kinds = a2 === 'all' ? ['live', 'vod', 'series'] : [a2], out = [], ki = 0;
+          var next = function () {
+            if (ki >= kinds.length) return done(out.join('\n') || 'لا نتائج');
+            var kind = kinds[ki++];
+            load(kind, function (all, cats) {
+              var hits = [];
+              for (var i = 0; i < all.length; i++) {
+                var nm = normName(all[i].name), ok = true;
+                for (var t = 0; t < tokens.length && ok; t++) ok = nm.indexOf(tokens[t]) >= 0;
+                if (ok) hits.push(all[i]);
+              }
+              hits.sort(function (x, y) { return String(x.name || '').length - String(y.name || '').length; });
+              out.push('— ' + kind + ': ' + hits.length + ' نتيجة' + (hits.length > 20 ? ' (أقصر 20 اسماً)' : ''));
+              hits.slice(0, 20).forEach(function (it) {
+                out.push(kind + ' | ' + idOf(kind, it) + ' | ' + (it.name || '') + ' | ' + (cats[it.category_id] || ''));
+              });
+              next();
+            });
+          };
+          return next();
+        }
+
+        if (action === 'play') {
+          if (kb.open) return done('لم يُنفَّذ: لوحة المفاتيح مفتوحة الآن');
+          var kind = a1, id = String(a2);
+          if (!KN[kind]) return done('لم يُنفَّذ: النوع live أو vod أو series');
+          return load(kind, function (all) {
+            var it = all.filter(function (x) { return idOf(kind, x) === id; })[0];
+            if (!it) return done('لم يُنفَّذ: لا ' + KN[kind] + ' بهذا المعرّف في الاشتراك المفتوح؛ استعمل find_media');
+            if (current !== prof) return done('لم يُنفَّذ: تغيّر الاشتراك المفتوح أثناء التحميل');
+            if (kind === 'live') {
+              // قائمة التقليب = قنوات تصنيفها، فيعمل ▲▼ في المشغّل وأمر القناة التالية/السابقة
+              var list = all.filter(function (x) { return x.category_id === it.category_id; });
+              player.channelList = list.slice(0, 2000);
+              player.channelIndex = Math.max(0, player.channelList.indexOf(it));
+              if (player.channelList[player.channelIndex] !== it) { player.channelList = [it]; player.channelIndex = 0; }
+              Storage.addRecent(prof.id, 'live', it);
+              playStream('live', it.stream_id, null, it.name, it);
+              return done('شُغّلت القناة «' + it.name + '» (' + (player.channelIndex + 1) + ' من ' + player.channelList.length + ' في تصنيفها)');
+            }
+            if (kind === 'vod') {
+              var go = function (info) {
+                Storage.addRecent(prof.id, 'vod', it);
+                player.movieMeta = titleMeta(info, it.name || it.title, it);
+                playStream('movie', it.stream_id, it.container_extension, it.name);
+                done('شُغّل الفيلم «' + it.name + '»');
+              };
+              return Xtream.vodInfo(prof, it.stream_id, go, function () { go(null); });
+            }
+            Xtream.seriesInfo(prof, it.series_id, function (info) {
+              var seasons = (info && info.episodes) || {}, eps = [];
+              Object.keys(seasons).sort(function (x, y) { return x - y; }).forEach(function (s) {
+                (seasons[s] || []).slice().sort(function (x, y) { return (Number(x.episode_num) || 0) - (Number(y.episode_num) || 0); })
+                  .forEach(function (ep) { eps.push(ep); });
+              });
+              if (!eps.length) return done('لم يُنفَّذ: لا حلقات في «' + it.name + '»');
+              var se = parseInt(a3, 10), en = parseInt(a4, 10);
+              if (en > 0) {
+                var idx = -1;
+                eps.forEach(function (ep, i) {
+                  if (idx < 0 && Number(ep.episode_num) === en && (!(se > 0) || Number(ep.season) === se)) idx = i;
+                });
+                if (idx < 0) return done('لم يُنفَّذ: لا حلقة ' + en + (se > 0 ? ' في الموسم ' + se : '') + '. المواسم: ' + Object.keys(seasons).join('، '));
+                Storage.addRecent(prof.id, 'series', it);
+                player.seriesMeta = titleMeta(info, it.name || it.title, it);
+                playSeriesEpisode(it, eps, idx);
+                return done('شُغّلت الحلقة ' + en + ' من الموسم ' + eps[idx].season + ' من «' + it.name + '»');
+              }
+              // بلا رقم حلقة: شاشة المواسم والحلقات (عليها علامة آخر حلقة شوهدت)، والرجوع منها إلى المحادثة
+              openSeriesEpisodes(it, info);
+              screenStack.pop();
+              screenStack.push(function () { renderChat(); });
+              done('فُتحت شاشة حلقات «' + it.name + '» (' + eps.length + ' حلقة في ' + Object.keys(seasons).length + ' موسم) ليختار أبو فيصل الحلقة');
+            }, function (e) { done('لم يُنفَّذ: تعذّر جلب حلقات المسلسل: ' + e); });
+          });
+        }
+        done('أمر غير معروف');
+      } catch (e) { done('لم يُنفَّذ: خطأ في الواجهة: ' + e); }
+    },
+
     /* لقطة من حالة الواجهة وإعداداتها (بلا بيانات دخول) */
     state: function () {
       var vis = document.querySelector('.screen:not(.hidden)');
@@ -3258,6 +3407,7 @@
         screen: vis ? vis.id : '',
         profile: current ? { name: current.name, host: current.host, singleConnection: !!current.singleConnection } : null,
         profilesCount: profiles.length,
+        lastChannel: (player.channelList && player.channelList[player.channelIndex] || {}).name || '',
         hiddenUser: UserSync.active(),
         players: {}, pageSize: Storage.getPageSize(), autoSubtitles: Storage.getAutoSubtitles()
       };

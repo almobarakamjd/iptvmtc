@@ -497,6 +497,13 @@ public class MainActivity extends Activity {
             });
         }
 
+        /** ناتج أداة غير متزامنة (AiTools.media) يعود إلى الخيط المنتظر في callJsAsync */
+        @JavascriptInterface
+        public void toolResult(String token, String text) {
+            java.util.concurrent.ArrayBlockingQueue<String> q = pendingTools.get(token);
+            if (q != null) q.offer(text == null ? "" : text);
+        }
+
         /** سطر من الواجهة إلى السجلّ بوسمه: toast لما رآه المستخدم، neterr لفشل الاتصال، jserr لخطأ الواجهة */
         @JavascriptInterface
         public void note(String tag, String msg) { RemoteLog.log(tag, msg); }
@@ -550,6 +557,29 @@ public class MainActivity extends Activity {
         String s = String.valueOf(v);
         if (s.startsWith("JSERR ")) throw new Exception(s);
         return s;
+    }
+
+    private static final java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.ArrayBlockingQueue<String>>
+            pendingTools = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.concurrent.atomic.AtomicInteger toolSeq = new java.util.concurrent.atomic.AtomicInteger();
+
+    /**
+     * ينادي دالة واجهة غير متزامنة أول معاملاتها رمز، تردّ لاحقاً بـAndroidAi.toolResult(رمز، نص)،
+     * وينتظر ردّها (تحميل قائمة كاملة من السيرفر قد يطول).
+     * @param argsJs بقية المعاملات كنص JS جاهز (مقتبَس)
+     */
+    static String callJsAsync(String fn, String argsJs, int seconds) throws Exception {
+        final String token = "t" + toolSeq.incrementAndGet();
+        java.util.concurrent.ArrayBlockingQueue<String> q = new java.util.concurrent.ArrayBlockingQueue<>(1);
+        pendingTools.put(token, q);
+        try {
+            callJs("(" + fn + "('" + token + "'," + argsJs + "),'')");
+            String r = q.poll(seconds, java.util.concurrent.TimeUnit.SECONDS);
+            if (r == null) throw new Exception("الواجهة لم تردّ خلال " + seconds + " ثانية");
+            return r;
+        } finally {
+            pendingTools.remove(token);
+        }
     }
 
     /** انهيار غير ملتقَط: يُكتب في ملف، ويدخل السجلّ عند الفتح التالي ليدرسه المساعد */

@@ -250,7 +250,11 @@ final class AiDoctor {
             + "بكل رسالة محدَّثان لحظة إرسالها. وفي المحادثة تملك أداة tv_control للتحكم بالتلفاز: نفّذ بها ما "
             + "يطلبه أبو فيصل صراحةً (صوت، تطبيق، مدخل، النافذة المصغّرة، شاشة في myTv+)، وأخبره بالنتيجة كما "
             + "أعادتها الأداة، ولا تقل إن أمراً تمّ إن أعادت «لم يُنفَّذ». إن طلب تطبيقاً باسمه فاستعمل "
-            + "list_apps أولاً لتعرف حزمته. رسائله قد تأتي من التعرف على الكلام فتحمل أخطاء سمع؛ افهم "
+            + "list_apps أولاً لتعرف حزمته. وتملك find_media وplay_media: إن طلب قناة أو فيلماً أو مسرحية "
+            + "أو مسلسلاً باسمه فابحث ثم شغّل، وإن قال «القناة التالية» أو «السابقة» أو «قلّب» فاستعمل "
+            + "channel_next أو channel_previous، وإن طلب اشتراكاً آخر فاستعمل open_profile. أبو فيصل يعود "
+            + "إلى شاشة المساعد ليكلّمك، فكون الشاشة الحالية screen-ai لا يعني أن أمراً سابقاً لم يُنفَّذ؛ "
+            + "صدّق ما أعادته الأداة وقتها. رسائله قد تأتي من التعرف على الكلام فتحمل أخطاء سمع؛ افهم "
             + "المقصود من السياق، واسأله إن التبس عليك أمر له أثر.";
 
     private static String converse(String mode, String question, JSONArray actions, long[] tokens) throws Exception {
@@ -378,7 +382,8 @@ final class AiDoctor {
             "volume_up", "volume_down", "volume_set", "mute", "unmute",
             "media_play_pause", "media_next", "media_previous", "home", "back",
             "list_apps", "launch_app", "list_inputs", "open_input",
-            "window_on", "window_off", "window_corner", "window_size", "open_screen");
+            "window_on", "window_off", "window_corner", "window_size", "open_screen",
+            "channel_next", "channel_previous", "list_profiles", "open_profile");
 
     /** @param control أداة التحكم بالتلفاز تُعطى في المحادثة فقط: لا يتحكم المساعد بالتلفاز من تلقاء نفسه */
     private static List<Tool> tools(boolean control) {
@@ -434,8 +439,37 @@ final class AiDoctor {
                     + "إلى مدخل بملء الشاشة (value معرّف المدخل). نافذة HDMI المصغّرة: window_on (value معرّف مدخل "
                     + "أو فارغ لآخر مدخل)، window_off، window_corner (value: 0 أعلى اليمين، 1 أعلى اليسار، 2 أسفل "
                     + "اليمين، 3 أسفل اليسار)، window_size (value: 25 أو 33 أو 50). داخل myTv+: open_screen "
-                    + "(value: live للقنوات، movies، series، home، settings). يعيد نتيجة الأمر.",
+                    + "(value: live للقنوات، movies، series، home، settings). تقليب القنوات: channel_next و"
+                    + "channel_previous يشغّلان القناة التالية أو السابقة في قائمة آخر قناة شُغّلت (lastChannel في "
+                    + "الحالة). الاشتراكات: list_profiles يعدّدها، open_profile يفتح واحداً (value رقمه في القائمة "
+                    + "أو اسمه). يعيد نتيجة الأمر.",
                     tvProps, "action", "value"));
+
+            Map<String, Object> findKind = prop("string", "أين يُبحث");
+            findKind.put("enum", Arrays.asList("live", "vod", "series", "all"));
+            Map<String, Object> findProps = new HashMap<>();
+            findProps.put("query", prop("string", "كلمات من الاسم كما قد تُكتب في القائمة؛ كل الكلمات يجب أن ترد في الاسم"));
+            findProps.put("kind", findKind);
+            list.add(tool("find_media", "يبحث بالاسم في قوائم الاشتراك المفتوح: live القنوات، vod الأفلام "
+                    + "(والمسرحيات)، series المسلسلات، all الثلاثة (أثقل؛ استعمله حين لا يُعرف النوع). يعيد لكل نوع "
+                    + "عدد النتائج وحتى 20 سطراً: النوع | المعرّف | الاسم | التصنيف. الأسماء في القوائم قد تكون "
+                    + "بالعربية أو بالإنجليزية أو بحروف لاتينية (Shahed Ma Shafsh)، وأغلب القنوات بحروف لاتينية "
+                    + "(Al Arabiya، MBC 1، beIN Sports 1): فللقنوات ابحث بالكتابتين العربية واللاتينية دائماً ثم "
+                    + "اختر من مجموع النتائج، ولغيرها جرّب كتابة أخرى أو كلمة واحدة مميزة قبل أن تقول إنه غير موجود. أول بحث في نوع قد يستغرق دقيقة.",
+                    findProps, "query", "kind"));
+
+            Map<String, Object> playKind = prop("string", "نوع المادة كما أعاده find_media");
+            playKind.put("enum", Arrays.asList("live", "vod", "series"));
+            Map<String, Object> playProps = new HashMap<>();
+            playProps.put("kind", playKind);
+            playProps.put("id", prop("string", "المعرّف من find_media"));
+            playProps.put("season", prop("integer", "للمسلسل: رقم الموسم، أو 0 إن لم يُحدَّد"));
+            playProps.put("episode", prop("integer", "للمسلسل: رقم الحلقة، أو 0 لفتح شاشة الحلقات ليختار المستخدم"));
+            list.add(tool("play_media", "يشغّل نتيجة من find_media في المشغّل: القناة تُشغَّل ومعها قنوات "
+                    + "تصنيفها (فيعمل بعدها التقليب)، والفيلم يُشغَّل مباشرة، والمسلسل تُشغَّل حلقته إن حُدّدت وإلا "
+                    + "تُفتح شاشة حلقاته. التشغيل يغطي شاشة المحادثة. إن تعددت النتائج المتقاربة فاسأل أبا فيصل "
+                    + "أيها يريد بدل أن تخمّن، إلا إن كان أحدها مطابقاً واضحاً.",
+                    playProps, "kind", "id", "season", "episode"));
         }
         return list;
     }
@@ -492,6 +526,24 @@ final class AiDoctor {
                 notes.put(note);
                 prefs.edit().putString("notes", notes.toString()).apply();
                 return "حُفظ";
+            }
+            case "find_media":
+                step = "يبحث في قوائم الاشتراك…";
+                MainActivity.notifyAi();
+                return MainActivity.callJsAsync("AiTools.media", "'find'," + JSONObject.quote(in.optString("query", ""))
+                        + "," + JSONObject.quote(in.optString("kind", "all")) + ",'',''", 240);
+            case "play_media": {
+                step = "يشغّل…";
+                MainActivity.notifyAi();
+                String res = MainActivity.callJsAsync("AiTools.media", "'play'," + JSONObject.quote(in.optString("kind", ""))
+                        + "," + JSONObject.quote(in.optString("id", "")) + "," + in.optInt("season", 0)
+                        + "," + in.optInt("episode", 0), 240);
+                JSONObject a = new JSONObject();
+                a.put("action", "tv:play_media");
+                a.put("reason", in.optString("kind", "") + " " + in.optString("id", ""));
+                a.put("result", cut(res, 200));
+                actions.put(a);
+                return res;
             }
             case "tv_control": {
                 String action = in.optString("action", "");
