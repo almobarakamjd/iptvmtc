@@ -39,7 +39,7 @@ final class FloatFrame {
     private final boolean overlay;
 
     FloatFrame(Activity activity) {
-        if (app == null) app = activity.getApplicationContext();
+        if (app == null && activity != null) app = activity.getApplicationContext();
         service = RemoteKeyAccessibilityService.instance;
         overlay = service == null && canOverlay();
         ctx = service != null ? service : overlay ? app : activity;
@@ -70,7 +70,10 @@ final class FloatFrame {
      */
     void attach(Activity activity, int corner, int sizePct) {
         DisplayMetrics dm = new DisplayMetrics();
-        activity.getWindowManager().getDefaultDisplay().getRealMetrics(dm);
+        // بلا نشاط (أمر من Player+ وmyTv+ في الخلفية) تؤخذ المقاسات من سياق النافذة العائمة
+        WindowManager metricsWm = activity != null ? activity.getWindowManager()
+                : (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
+        metricsWm.getDefaultDisplay().getRealMetrics(dm);
         int pct = Math.max(15, Math.min(60, sizePct));
         w = dm.widthPixels * pct / 100;
         h = w * 9 / 16;

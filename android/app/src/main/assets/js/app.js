@@ -2384,6 +2384,10 @@
       c.on = false;
       try { localStorage.setItem(HDMI_KEY, JSON.stringify(c)); } catch (e) {}
     }
+    if (AndroidHdmi.takeOn && AndroidHdmi.takeOn() && c.input) {   // شُغّلت من قائمة Player+
+      c.on = true;
+      try { localStorage.setItem(HDMI_KEY, JSON.stringify(c)); } catch (e) {}
+    }
     if (!(c.on && c.input)) { AndroidHdmi.hide(); return; }
     if (c.input !== 'demo' && AndroidHdmi.resumed && !hdmiGuard(c)) return;
     if (AndroidHdmi.mute) AndroidHdmi.mute(!c.sound);   // قبل التوليف، فالصوت يُضبط عند إنشاء النافذة
@@ -3042,7 +3046,15 @@
     check_updates: 'فحص التحديثات', page_size_100: 'عدد البطاقات 100', page_size_200: 'عدد البطاقات 200'
   };
 
+  var AI_TV_NAMES = {
+    volume_up: 'رفع الصوت', volume_down: 'خفض الصوت', volume_set: 'ضبط الصوت', mute: 'كتم الصوت', unmute: 'إلغاء الكتم',
+    media_play_pause: 'تشغيل/إيقاف', media_next: 'التالي', media_previous: 'السابق', home: 'الشاشة الرئيسية', back: 'رجوع',
+    launch_app: 'فتح تطبيق', open_input: 'التحويل إلى مدخل', window_on: 'تشغيل نافذة HDMI', window_off: 'إطفاء نافذة HDMI',
+    window_corner: 'موضع نافذة HDMI', window_size: 'حجم نافذة HDMI', open_screen: 'فتح شاشة'
+  };
+
   function aiFixName(a) {
+    if (a.indexOf('tv:') === 0) return AI_TV_NAMES[a.substring(3)] || a.substring(3);
     if (AI_FIX_NAMES[a]) return AI_FIX_NAMES[a];
     var m = /^player_(live|movie)_(playerplus|vlc|mx)$/.exec(a);
     if (m) return (m[1] === 'live' ? 'مشغّل القنوات: ' : 'مشغّل الأفلام: ') + { playerplus: 'Player+', vlc: 'VLC', mx: 'MX Player' }[m[2]];
@@ -3083,13 +3095,17 @@
           renderChat();
         });
       });
+      if (AndroidAi.listen) {
+        add('🎤 تكلّم <span class="sub">بميكروفون الريموت، وتُرسل رسالتك فور انتهائك</span>',
+          function () { AndroidAi.listen(); });
+      }
     }
     var chat = st.chat || [];
     if (chat.length && !st.running) {
       add('🆕 محادثة جديدة <span class="sub">تمسح هذه الرسائل</span>',
         function () { AndroidAi.clearChat(); renderChat(); });
     }
-    if (!chat.length) add('اكتب ما تريد: مشكلة تراها، سؤالاً عن التطبيق، أو طلب تغيير إعداد (مثل: أطفئ نافذة HDMI).', null, 'ai-line ai-q');
+    if (!chat.length) add('اكتب أو قل ما تريد: مشكلة تراها، سؤالاً، أو أمراً للتلفاز (مثل: أطفئ نافذة HDMI، ارفع الصوت، افتح يوتيوب).', null, 'ai-line ai-q');
     // مجموعات: رسالة المستخدم وما تلاها من ردّ، الأحدث أولاً
     var groups = [];
     chat.forEach(function (t) {
@@ -3103,7 +3119,8 @@
           if (ln.trim()) add((i === 0 ? '🤖 ' : '') + esc(ln), null, 'ai-line');
         });
         (t.actions || []).forEach(function (a) {
-          add('🔧 طبّق المساعد: ' + esc(aiFixName(a.action)) + ' <span class="sub">' + esc(a.result || '') + '</span>', null, 'ai-line');
+          add((a.action.indexOf('tv:') === 0 ? '📺 أمر للتلفاز: ' : '🔧 طبّق المساعد: ') + esc(aiFixName(a.action)) +
+            ' <span class="sub">' + esc(a.result || '') + '</span>', null, 'ai-line');
         });
       });
     });
@@ -3188,7 +3205,52 @@
     else if (!$('screen-home').classList.contains('hidden') && !confirmDialog.open && !st.running) homeScreen();
   };
 
+  /* نص سمعه التعرف على الكلام (AndroidAi.listen): يُرسل رسالةً في المحادثة */
+  window.__onVoice = function (text, err) {
+    if (err) { toast('التعرف على الكلام غير متاح في هذا الجهاز — اكتب رسالتك', 5000); return; }
+    if (!text) { toast('لم أسمع شيئاً — حاول مرة أخرى'); return; }
+    aiStart('chat', text);
+    if (!$('screen-ai').classList.contains('hidden')) renderChat();
+  };
+
   window.AiTools = {
+    /* أوامر tv_control التي تُنفَّذ في الواجهة: نافذة HDMI المصغّرة وشاشات myTv+ */
+    tv: function (action, value) {
+      var hc = (typeof AndroidHdmi !== 'undefined') ? hdmiCfg() : null, n = parseInt(value, 10);
+      if (action.indexOf('window_') === 0 && !hc) return 'لم يُنفَّذ: النافذة المصغّرة غير متاحة في هذا الجهاز';
+      switch (action) {
+        case 'window_off':
+          hc.on = false; aiSaveHdmi(hc); return 'أُطفئت نافذة HDMI';
+        case 'window_on':
+          var ins = hdmiInputs();
+          var pick = ins.filter(function (x) { return x.id === value; })[0] ||
+            ins.filter(function (x) { return x.id === hc.input; })[0] || ins[0];
+          if (!pick) return 'لم يُنفَّذ: لا مداخل في هذا الجهاز';
+          hc.on = true; hc.input = pick.id; aiSaveHdmi(hc);
+          return 'شُغّلت نافذة HDMI على «' + pick.label + '»';
+        case 'window_corner':
+          if (!(n >= 0 && n < HDMI_CORNERS.length)) return 'لم يُنفَّذ: الموضع من 0 إلى 3';
+          hc.corner = n; aiSaveHdmi(hc); return 'موضع النافذة: ' + HDMI_CORNERS[n];
+        case 'window_size':
+          if (HDMI_SIZES.indexOf(n) < 0) return 'لم يُنفَّذ: الحجم 25 أو 33 أو 50';
+          hc.size = n; aiSaveHdmi(hc); return 'حجم النافذة: ' + hdmiSizeName(n);
+        case 'open_screen':
+          if (kb.open) return 'لم يُنفَّذ: لوحة المفاتيح مفتوحة الآن';
+          if (value === 'settings') { setTimeout(openSettings, 300); return 'فُتحت الإعدادات'; }
+          if (!current) return 'لم يُنفَّذ: لا اشتراك مفتوح؛ يختار المستخدم اشتراكاً أولاً';
+          var go = {
+            home: function () { screenStack = []; homeScreen(); },
+            live: function () { screenStack = []; homeScreen(); openBrowse('live', '📺 القنوات المباشرة'); },
+            movies: function () { screenStack = []; homeScreen(); openBrowse('vod', '🎬 الأفلام'); },
+            series: function () { screenStack = []; homeScreen(); openBrowse('series', '📀 المسلسلات'); }
+          }[value];
+          if (!go) return 'لم يُنفَّذ: الشاشة live أو movies أو series أو home أو settings';
+          setTimeout(go, 300);
+          return 'فُتحت الشاشة: ' + value;
+      }
+      return 'أمر غير معروف';
+    },
+
     /* لقطة من حالة الواجهة وإعداداتها (بلا بيانات دخول) */
     state: function () {
       var vis = document.querySelector('.screen:not(.hidden)');

@@ -17,6 +17,15 @@
     <!-- لمعرفة هل مشغّل myTv+ الخاص مثبّت (أندرويد 11+ يُخفي التطبيقات الأخرى افتراضياً) -->
     <queries>
         <package android:name="com.oqod.movie_player" />
+        <!-- «المساعد الذكي» يعدّد التطبيقات المثبّتة ليفتحها بالاسم (tv_control) -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
     </queries>
 
     <uses-feature android:name="android.software.leanback" android:required="false" />

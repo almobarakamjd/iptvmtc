@@ -7,7 +7,8 @@ import android.content.Intent;
 /**
  * أوامر نافذة HDMI من Player+ أثناء المشاهدة (قائمته هي التي تملك الريموت حينها):
  * audio_hdmi / audio_main لاختيار الصوت، big / small لتكبير النافذة لملء الشاشة وإعادتها،
- * off لإطفاء النافذة، reset عند خروج المشغّل. النتيجة: 1 ظاهرة وعائمة فوق المشغّل، 2 تعمل بلا تعويم، 3 مطفأة (و0 إن لم يصل البث).
+ * off لإطفاء النافذة، reset عند خروج المشغّل، toggle لتشغيلها أو إطفائها (نتيجته: 11 شُغّلت، 12 أُطفئت،
+ * 2 لا إذن تعويم فلن تظهر فوق المشغّل، 4 لم يُختر مدخل بعد، 5 تعذّر التشغيل). نتيجة البقية: 1 ظاهرة وعائمة فوق المشغّل، 2 تعمل بلا تعويم، 3 مطفأة (و0 إن لم يصل البث).
  */
 public class WindowCommandReceiver extends BroadcastReceiver {
     @Override
@@ -15,6 +16,28 @@ public class WindowCommandReceiver extends BroadcastReceiver {
         String cmd = intent.getStringExtra("cmd");
         if (FloatFrame.app == null) FloatFrame.app = context.getApplicationContext();
         HdmiWindow h = HdmiWindow.get(context);
+        if ("toggle".equals(cmd)) {
+            int r;
+            if (h.isShown()) {
+                h.hide();
+                HdmiWindow.offByPlayer = true;
+                HdmiWindow.onByPlayer = false;
+                r = 12;
+            } else if (!FloatFrame.canFloat()) {
+                r = 2;
+            } else if (!h.hasLast()) {
+                r = 4;
+            } else {
+                h.setMuted(true);   // المشغّل يعمل: صوته هو المسموع حتى يختار المستخدم صوت النافذة
+                h.showLast();
+                HdmiWindow.onByPlayer = h.isShown();
+                HdmiWindow.offByPlayer = false;
+                r = h.isShown() ? 11 : 5;
+            }
+            RemoteLog.log("cmd", "toggle -> " + r);
+            if (isOrderedBroadcast()) setResultCode(r);
+            return;
+        }
         // 1 ظاهرة وعائمة فوق المشغّل، 2 تعمل لكن داخل myTv+ فقط (خدمة الإتاحة غير مفعّلة)، 3 مطفأة
         if (isOrderedBroadcast()) setResultCode(!h.isShown() ? 3 : h.isFloating() ? 1 : 2);
         RemoteLog.log("cmd", cmd + " shown=" + h.isShown() + " floating=" + h.isFloating());

@@ -247,7 +247,11 @@ final class AiDoctor {
             + "قليلة وبلا تقسيم التقرير أعلاه. إن طلب تغيير إعداد من قائمة apply_fix فنفّذه وأخبره بما تم. "
             + "وإن طلب ما لا تملكه الأدوات (ميزة جديدة، تغيير في سلوك التطبيق) فقل له بوضوح أنه يحتاج "
             + "تحديثاً من المطوّر، واكتب الطلب في سطر يبدأ بـ«للمطوّر:» ليصله. الحالة والسجلّ المرفقان "
-            + "بكل رسالة محدَّثان لحظة إرسالها.";
+            + "بكل رسالة محدَّثان لحظة إرسالها. وفي المحادثة تملك أداة tv_control للتحكم بالتلفاز: نفّذ بها ما "
+            + "يطلبه أبو فيصل صراحةً (صوت، تطبيق، مدخل، النافذة المصغّرة، شاشة في myTv+)، وأخبره بالنتيجة كما "
+            + "أعادتها الأداة، ولا تقل إن أمراً تمّ إن أعادت «لم يُنفَّذ». إن طلب تطبيقاً باسمه فاستعمل "
+            + "list_apps أولاً لتعرف حزمته. رسائله قد تأتي من التعرف على الكلام فتحمل أخطاء سمع؛ افهم "
+            + "المقصود من السياق، واسأله إن التبس عليك أمر له أثر.";
 
     private static String converse(String mode, String question, JSONArray actions, long[] tokens) throws Exception {
         final List<String> secrets = secrets();
@@ -298,7 +302,7 @@ final class AiDoctor {
                 // عند رفض نادر من مصنّف الأمان يُعاد الطلب على نموذج بديل من الخادم (كما في Player+)
                 .putAdditionalHeader("anthropic-beta", "server-side-fallback-2026-07-01")
                 .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"));
-        for (Tool t : tools()) b.addTool(t);
+        for (Tool t : tools("chat".equals(mode))) b.addTool(t);
 
         StringBuilder text = new StringBuilder();
         for (int round = 0; round < MAX_ROUNDS; round++) {
@@ -370,7 +374,14 @@ final class AiDoctor {
             "player_movie_playerplus", "player_movie_vlc", "player_movie_mx",
             "page_size_100", "page_size_200", "clear_cache", "reload_ui", "check_updates");
 
-    private static List<Tool> tools() {
+    static final List<String> TV_ACTIONS = Arrays.asList(
+            "volume_up", "volume_down", "volume_set", "mute", "unmute",
+            "media_play_pause", "media_next", "media_previous", "home", "back",
+            "list_apps", "launch_app", "list_inputs", "open_input",
+            "window_on", "window_off", "window_corner", "window_size", "open_screen");
+
+    /** @param control أداة التحكم بالتلفاز تُعطى في المحادثة فقط: لا يتحكم المساعد بالتلفاز من تلقاء نفسه */
+    private static List<Tool> tools(boolean control) {
         List<Tool> list = new ArrayList<>();
 
         Map<String, Object> logProps = new HashMap<>();
@@ -407,6 +418,25 @@ final class AiDoctor {
         Map<String, Object> noteProps = new HashMap<>();
         noteProps.put("note", prop("string", "الدرس في سطر واحد، حتى 300 حرف"));
         list.add(tool("remember", "يحفظ درساً يُرفق بكل فحص قادم على هذا الجهاز.", noteProps, "note"));
+
+        if (control) {
+            Map<String, Object> tvEnum = prop("string", "الأمر");
+            tvEnum.put("enum", TV_ACTIONS);
+            Map<String, Object> tvProps = new HashMap<>();
+            tvProps.put("action", tvEnum);
+            tvProps.put("value", prop("string", "قيمة الأمر إن احتاجها، وإلا نص فارغ"));
+            list.add(tool("tv_control", "يتحكم بالتلفاز بما يملكه التطبيق من صلاحيات، حين يطلب أبو فيصل ذلك. "
+                    + "الصوت: volume_up، volume_down، volume_set (value من 0 إلى 100)، mute، unmute. "
+                    + "الوسائط للتطبيق الذي يشغّل الصوت الآن: media_play_pause، media_next، media_previous. "
+                    + "التنقل: home للشاشة الرئيسية للتلفاز، back (يتطلب خدمة الإتاحة). "
+                    + "التطبيقات: list_apps يعدّد المثبّت باسمه وحزمته، launch_app يفتح تطبيقاً (value اسم الحزمة من "
+                    + "list_apps). المداخل: list_inputs يعدّد مداخل HDMI بمعرّفاتها، open_input يحوّل التلفاز كله "
+                    + "إلى مدخل بملء الشاشة (value معرّف المدخل). نافذة HDMI المصغّرة: window_on (value معرّف مدخل "
+                    + "أو فارغ لآخر مدخل)، window_off، window_corner (value: 0 أعلى اليمين، 1 أعلى اليسار، 2 أسفل "
+                    + "اليمين، 3 أسفل اليسار)، window_size (value: 25 أو 33 أو 50). داخل myTv+: open_screen "
+                    + "(value: live للقنوات، movies، series، home، settings). يعيد نتيجة الأمر.",
+                    tvProps, "action", "value"));
+        }
         return list;
     }
 
@@ -463,9 +493,107 @@ final class AiDoctor {
                 prefs.edit().putString("notes", notes.toString()).apply();
                 return "حُفظ";
             }
+            case "tv_control": {
+                String action = in.optString("action", "");
+                if (!TV_ACTIONS.contains(action)) return "أمر غير معروف: " + action;
+                step = "ينفّذ أمراً على التلفاز…";
+                MainActivity.notifyAi();
+                String res = tvControl(action, in.optString("value", ""));
+                if (!action.startsWith("list_")) {
+                    JSONObject a = new JSONObject();
+                    a.put("action", "tv:" + action);
+                    a.put("reason", in.optString("value", ""));
+                    a.put("result", cut(res, 200));
+                    actions.put(a);
+                }
+                return res;
+            }
             default:
                 return "أداة غير معروفة: " + name;
         }
+    }
+
+    /* ---------- التحكم بالتلفاز ---------- */
+
+    private static String tvControl(String action, String value) throws Exception {
+        android.media.AudioManager am = (android.media.AudioManager) app.getSystemService(Context.AUDIO_SERVICE);
+        final int music = android.media.AudioManager.STREAM_MUSIC, ui = android.media.AudioManager.FLAG_SHOW_UI;
+        switch (action) {
+            case "volume_up": am.adjustStreamVolume(music, android.media.AudioManager.ADJUST_RAISE, ui); return volume(am);
+            case "volume_down": am.adjustStreamVolume(music, android.media.AudioManager.ADJUST_LOWER, ui); return volume(am);
+            case "mute": am.adjustStreamVolume(music, android.media.AudioManager.ADJUST_MUTE, ui); return volume(am);
+            case "unmute": am.adjustStreamVolume(music, android.media.AudioManager.ADJUST_UNMUTE, ui); return volume(am);
+            case "volume_set": {
+                int pct = Math.max(0, Math.min(100, Integer.parseInt(value.trim())));
+                am.setStreamVolume(music, Math.round(am.getStreamMaxVolume(music) * pct / 100f), ui);
+                return volume(am);
+            }
+            case "media_play_pause": return mediaKey(am, android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE);
+            case "media_next": return mediaKey(am, android.view.KeyEvent.KEYCODE_MEDIA_NEXT);
+            case "media_previous": return mediaKey(am, android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS);
+            case "home":
+                return startOutside(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), "فُتحت الشاشة الرئيسية للتلفاز");
+            case "back": {
+                RemoteKeyAccessibilityService svc = RemoteKeyAccessibilityService.instance;
+                if (svc == null) return "لم يُنفَّذ: زر الرجوع يتطلب تفعيل خدمة myTv+ في «الإتاحة» من إعدادات التلفاز";
+                return svc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+                        ? "نُفّذ الرجوع" : "رفض النظام الرجوع";
+            }
+            case "list_apps": return listApps();
+            case "launch_app": {
+                android.content.pm.PackageManager pm = app.getPackageManager();
+                Intent in = pm.getLeanbackLaunchIntentForPackage(value.trim());
+                if (in == null) in = pm.getLaunchIntentForPackage(value.trim());
+                if (in == null) return "لم يُفتح: لا تطبيق بهذه الحزمة (" + value + ")؛ استعمل list_apps";
+                return startOutside(in, "فُتح التطبيق " + value);
+            }
+            case "list_inputs": return HdmiWindow.get(app).inputsJson();
+            case "open_input":
+                if (value.trim().length() == 0 || HdmiWindow.DEMO_ID.equals(value.trim())) return "لم يُنفَّذ: يلزم معرّف مدخل حقيقي من list_inputs";
+                return startOutside(new Intent(Intent.ACTION_VIEW,
+                        android.media.tv.TvContract.buildChannelUriForPassthroughInput(value.trim())), "حُوِّل التلفاز إلى المدخل " + value);
+            default:   // النافذة المصغّرة وشاشات myTv+ في الواجهة
+                return MainActivity.callJs("AiTools.tv(" + JSONObject.quote(action) + "," + JSONObject.quote(value) + ")");
+        }
+    }
+
+    private static String volume(android.media.AudioManager am) {
+        final int music = android.media.AudioManager.STREAM_MUSIC;
+        return "الصوت الآن " + am.getStreamVolume(music) + " من " + am.getStreamMaxVolume(music)
+                + (am.isStreamMute(music) ? " (مكتوم)" : "")
+                + (am.isVolumeFixed() ? ". تنبيه: صوت هذا الجهاز ثابت من النظام فقد لا يتغير من التطبيق" : "");
+    }
+
+    private static String mediaKey(android.media.AudioManager am, int code) {
+        long now = SystemClock.uptimeMillis();
+        am.dispatchMediaKeyEvent(new android.view.KeyEvent(now, now, android.view.KeyEvent.ACTION_DOWN, code, 0));
+        am.dispatchMediaKeyEvent(new android.view.KeyEvent(now, now, android.view.KeyEvent.ACTION_UP, code, 0));
+        return "أُرسل الأمر إلى التطبيق الذي يشغّل الوسائط الآن";
+    }
+
+    /** فتح نشاط خارج myTv+: مغادرة منا لا انتزاع من التلفاز */
+    private static String startOutside(Intent in, String ok) {
+        try {
+            HdmiWindow.selfLeaveAt = SystemClock.elapsedRealtime();
+            RemoteKeyAccessibilityService svc = RemoteKeyAccessibilityService.instance;
+            (svc != null ? svc : app).startActivity(in.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            return ok;
+        } catch (Exception e) {
+            return "لم يُنفَّذ: " + e;
+        }
+    }
+
+    private static String listApps() {
+        android.content.pm.PackageManager pm = app.getPackageManager();
+        Map<String, String> found = new java.util.TreeMap<>();
+        for (String cat : new String[]{Intent.CATEGORY_LEANBACK_LAUNCHER, Intent.CATEGORY_LAUNCHER}) {
+            for (android.content.pm.ResolveInfo ri : pm.queryIntentActivities(new Intent(Intent.ACTION_MAIN).addCategory(cat), 0)) {
+                found.put(ri.activityInfo.packageName, String.valueOf(ri.loadLabel(pm)));
+            }
+        }
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, String> e : found.entrySet()) sb.append(e.getValue()).append(" = ").append(e.getKey()).append('\n');
+        return sb.length() > 0 ? sb.toString() : "(لم يُعثر على تطبيقات)";
     }
 
     private static String notesText() {

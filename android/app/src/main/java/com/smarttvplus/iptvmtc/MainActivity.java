@@ -430,6 +430,14 @@ public class MainActivity extends Activity {
             return b;
         }
 
+        /** true مرة واحدة إن شُغّلت النافذة من قائمة Player+، لتحفظ الواجهة التشغيل */
+        @JavascriptInterface
+        public boolean takeOn() {
+            boolean b = HdmiWindow.onByPlayer;
+            HdmiWindow.onByPlayer = false;
+            return b;
+        }
+
         /** هل التطبيق في الواجهة الآن؟ يستعمله حارس HDMI ليعرف هل أخرجنا التلفاز عند التوليف */
         @JavascriptInterface
         public boolean resumed() {
@@ -471,9 +479,41 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void clearChat() { AiDoctor.clearChat(); }
 
+        /** يفتح التعرف على الكلام (ميكروفون الريموت)، والنص يعود إلى window.__onVoice(text, error) */
+        @JavascriptInterface
+        public void listen() {
+            runOnUiThread(() -> {
+                Intent in = new Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                        .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                                android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                        .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "ar-SA")
+                        .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "تكلّم الآن…");
+                try {
+                    startActivityForResult(in, REQ_VOICE);
+                } catch (Exception e) {
+                    RemoteLog.log("app", "voice unavailable: " + e);
+                    web.evaluateJavascript("if(window.__onVoice)window.__onVoice('','unavailable');", null);
+                }
+            });
+        }
+
         /** سطر من الواجهة إلى السجلّ بوسمه: toast لما رآه المستخدم، neterr لفشل الاتصال، jserr لخطأ الواجهة */
         @JavascriptInterface
         public void note(String tag, String msg) { RemoteLog.log(tag, msg); }
+    }
+
+    private static final int REQ_VOICE = 2001;
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQ_VOICE || web == null) return;
+        String text = "";
+        if (resultCode == RESULT_OK && data != null) {
+            java.util.ArrayList<String> r = data.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS);
+            if (r != null && !r.isEmpty()) text = r.get(0);
+        }
+        web.evaluateJavascript("if(window.__onVoice)window.__onVoice(" + org.json.JSONObject.quote(text) + ",'');", null);
     }
 
     /** تغيّرت حالة المساعد (بدأ، خطوة جديدة، انتهى): تُبلَّغ الواجهة إن كانت حيّة */

@@ -37,6 +37,8 @@ final class HdmiWindow {
     private static HdmiWindow instance;
     /** أطفأها المستخدم من قائمة Player+: تقرؤها الواجهة عند العودة فتحفظ الإطفاء */
     static volatile boolean offByPlayer;
+    /** شُغّلت من قائمة Player+: تحفظ الواجهة التشغيل عند عودتها (انظر takeOn) */
+    static volatile boolean onByPlayer;
     /** وقت آخر توليف على مدخل حقيقي، وكم مرة أعدنا أنفسنا للواجهة بعده (انظر MainActivity.onPause) */
     static volatile long lastTuneAt;
     /** وقت آخر مغادرة بدأناها نحن (تشغيل فيلم): ليست انتزاعاً */
@@ -106,6 +108,10 @@ final class HdmiWindow {
         }
         hide();
         RemoteLog.log("hdmi", "show " + sig + " muted=" + muted);
+        try {
+            app.getSharedPreferences("hdmi_window", Context.MODE_PRIVATE).edit()
+                    .putString("input", inputId).putInt("corner", corner).putInt("size", sizePct).apply();
+        } catch (Exception ignored) {}
         FloatFrame f = new FloatFrame(activity);
         Context ctx = f.ctx;
 
@@ -159,6 +165,17 @@ final class HdmiWindow {
             RemoteLog.log("hdmi", "attach failed: " + t);
             releaseTv();
         }
+    }
+
+    /** هل سبق أن شُغّلت النافذة على مدخل (فيُعرف بمَ تُشغَّل من Player+)؟ */
+    boolean hasLast() {
+        return app.getSharedPreferences("hdmi_window", Context.MODE_PRIVATE).getString("input", "").length() > 0;
+    }
+
+    /** تشغيلها عائمةً بآخر مدخل وموضع وحجم، بلا نشاط myTv+ (أمر toggle من Player+) */
+    void showLast() {
+        android.content.SharedPreferences p = app.getSharedPreferences("hdmi_window", Context.MODE_PRIVATE);
+        show(null, p.getString("input", ""), p.getInt("corner", 1), p.getInt("size", 33));
     }
 
     void setBig(boolean big) {
