@@ -223,3 +223,4 @@ body.touch ::-webkit-scrollbar { display: none; }
 #ai-list .item.ai-line.ai-q { color: #9fb4d8; }
 #ai-list .item.ai-head { color: #6fb4ff; margin-top: 12px; }
 #ai-list .item.ai-line.focused { background: #1d2a40; }
+#ai-list .item.ai-line.ai-me { color: #ffd98a; margin-top: 14px; }

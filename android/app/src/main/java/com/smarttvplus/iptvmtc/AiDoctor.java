@@ -57,6 +57,7 @@ final class AiDoctor {
     private static final int MAX_ROUNDS = 8;
     private static final int MAX_NOTES = 30;
     private static final int MAX_HISTORY = 8;
+    private static final int MAX_CHAT = 40;
 
     private static final ExecutorService worker = Executors.newSingleThreadExecutor();
     private static Context app;
@@ -81,6 +82,25 @@ final class AiDoctor {
 
     static void clearNotes() { prefs.edit().remove("notes").apply(); }
 
+    /** محادثة جديدة: تُمسح الرسائل السابقة فلا تُرسل مع الرسالة القادمة */
+    static void clearChat() { prefs.edit().remove("chat").apply(); }
+
+    private static void addChatTurn(String role, String text, String error, JSONArray actions) {
+        try {
+            JSONArray old = new JSONArray(prefs.getString("chat", "[]"));
+            JSONArray chat = new JSONArray();
+            for (int i = Math.max(0, old.length() - (MAX_CHAT - 1)); i < old.length(); i++) chat.put(old.get(i));
+            JSONObject t = new JSONObject();
+            t.put("role", role);
+            t.put("text", text);
+            t.put("error", error);
+            t.put("t", System.currentTimeMillis());
+            if (actions != null) t.put("actions", actions);
+            chat.put(t);
+            prefs.edit().putString("chat", chat.toString()).apply();
+        } catch (Exception ignored) {}
+    }
+
     /** الحالة كاملة للواجهة: هل يعمل، الخطوة الجارية، آخر التقارير، وما تعلّمه */
     static String stateJson() {
         try {
@@ -91,6 +111,7 @@ final class AiDoctor {
             o.put("auto", autoEnabled());
             o.put("history", new JSONArray(prefs.getString("history", "[]")));
             o.put("notes", new JSONArray(prefs.getString("notes", "[]")));
+            o.put("chat", new JSONArray(prefs.getString("chat", "[]")));
             return o.toString();
         } catch (Exception e) {
             return "{}";
@@ -135,6 +156,7 @@ final class AiDoctor {
         if (running) return "المساعد يعمل الآن";
         running = true;   // قبل الدخول في الطابور، حتى تعرضه الواجهة فوراً
         step = "يبدأ…";
+        if ("chat".equals(mode)) addChatTurn("user", question, "", null);
         worker.execute(() -> run(mode, question));
         return "";
     }
@@ -161,7 +183,8 @@ final class AiDoctor {
             error = "خطأ في المساعد: " + t;
         }
 
-        try {
+        if ("chat".equals(mode)) addChatTurn("ai", report, error, actions);
+        else try {
             JSONObject entry = new JSONObject();
             entry.put("t", System.currentTimeMillis());
             entry.put("mode", mode);
@@ -211,16 +234,27 @@ final class AiDoctor {
             + "(جهاز آخر يشاهد، أو جلسة القناة السابقة لم تُغلق بعد وتزول خلال دقيقة تقريباً). أسطر onPause و"
             + "onStop وonResume طبيعية وليست أخطاء. السطر «left front … return» يعني أن تطبيق التلفاز انتزع "
             + "الشاشة بعد التوليف على HDMI فأعاد التطبيق نفسه، و«too many returns» يعني أن ذلك تكرر حتى توقف "
-            + "عن العودة. أسطر الوسم toast هي الرسائل التي رآها المستخدم على الشاشة.\n\n"
+            + "عن العودة. أسطر الوسم toast هي الرسائل التي رآها المستخدم على الشاشة. وعلى تلفاز TCL (سجلّ "
+            + "2026-11-26): ما دامت نافذة HDMI تعمل ينتزع تطبيق التلفاز الشاشة إلى المدخل بملء الشاشة بعد كل "
+            + "توليف تقريباً، ويتكرر ذلك عند كل عودة للتطبيق؛ والمرجّح غير المؤكد أنها تمنع Player+ من تشغيل "
+            + "الفيديو (ERROR_CODE_DECODING_FAILED) لأن شريحة التلفاز لا تعالج المدخل وفيلماً معاً. العلاج "
+            + "المتاح لك في الحالين إطفاء النافذة (hdmi_window_off)، وما سواه يحتاج تحديثاً من المطوّر.\n\n"
             + "الرد النهائي: نص عربي عادي بلا رموز تنسيق (لا نجوم ولا عناوين بعلامة #)، أسطر قصيرة، في ما لا "
             + "يزيد على 15 سطراً. ابدأ بالخلاصة في سطر، ثم «السبب»، ثم «ما فعلتُه» إن طبّقت شيئاً، ثم «ما "
             + "عليك فعله» إن بقي شيء بيد المستخدم، ثم «للمطوّر» إن لزم تعديل في الكود. وإن لم تجد خطأً فقل "
-            + "ذلك في سطرين ولا تختلق مشكلة.";
+            + "ذلك في سطرين ولا تختلق مشكلة.\n\n"
+            + "في المحادثة (حين تبدأ الرسالة بـ«محادثة»): أجب عن رسالة أبي فيصل مباشرة بأسلوب حوار، في أسطر "
+            + "قليلة وبلا تقسيم التقرير أعلاه. إن طلب تغيير إعداد من قائمة apply_fix فنفّذه وأخبره بما تم. "
+            + "وإن طلب ما لا تملكه الأدوات (ميزة جديدة، تغيير في سلوك التطبيق) فقل له بوضوح أنه يحتاج "
+            + "تحديثاً من المطوّر، واكتب الطلب في سطر يبدأ بـ«للمطوّر:» ليصله. الحالة والسجلّ المرفقان "
+            + "بكل رسالة محدَّثان لحظة إرسالها.";
 
     private static String converse(String mode, String question, JSONArray actions, long[] tokens) throws Exception {
         final List<String> secrets = secrets();
         StringBuilder ctx = new StringBuilder();
-        if ("auto".equals(mode)) {
+        if ("chat".equals(mode)) {
+            ctx.append("محادثة. رسالة أبي فيصل:\n").append(question).append("\n\n");
+        } else if ("auto".equals(mode)) {
             ctx.append("فحص تلقائي أطلقه هذا السطر في السجلّ:\n").append(question).append("\n\n");
         } else if (question != null && question.length() > 0) {
             ctx.append("أبو فيصل يسأل أو يصف مشكلة:\n").append(question).append("\n\n");
@@ -247,8 +281,20 @@ final class AiDoctor {
                 .model(MODEL)
                 .maxTokens(8000L)
                 .system(SYSTEM)
-                .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.MEDIUM).build())
-                .addUserMessage(redact(ctx.toString(), secrets))
+                .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.MEDIUM).build());
+        if ("chat".equals(mode)) {
+            // ما سبق من المحادثة نصاً: كل رسالة تلاها ردّ ناجح (الرسالة الحالية آخر القائمة فتُستثنى)
+            JSONArray chat = new JSONArray(prefs.getString("chat", "[]"));
+            for (int i = 0; i + 1 < chat.length() - 1; i++) {
+                JSONObject u = chat.getJSONObject(i), a = chat.getJSONObject(i + 1);
+                if (!"user".equals(u.optString("role")) || !"ai".equals(a.optString("role"))) continue;
+                if (a.optString("error").length() > 0 || a.optString("text").length() == 0) continue;
+                b.addUserMessage(redact(u.optString("text"), secrets));
+                b.addAssistantMessage(a.optString("text"));
+                i++;
+            }
+        }
+        b.addUserMessage(redact(ctx.toString(), secrets))
                 // عند رفض نادر من مصنّف الأمان يُعاد الطلب على نموذج بديل من الخادم (كما في Player+)
                 .putAdditionalHeader("anthropic-beta", "server-side-fallback-2026-07-01")
                 .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"));

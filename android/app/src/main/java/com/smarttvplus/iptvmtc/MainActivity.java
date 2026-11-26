@@ -468,6 +468,9 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void clearNotes() { AiDoctor.clearNotes(); }
 
+        @JavascriptInterface
+        public void clearChat() { AiDoctor.clearChat(); }
+
         /** سطر من الواجهة إلى السجلّ بوسمه: toast لما رآه المستخدم، neterr لفشل الاتصال، jserr لخطأ الواجهة */
         @JavascriptInterface
         public void note(String tag, String msg) { RemoteLog.log(tag, msg); }

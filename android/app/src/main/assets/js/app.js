@@ -3054,8 +3054,19 @@
     renderAi();
   }
 
-  function renderAi(keepFocus) {
+  var aiChatOpen = false;
+
+  function aiStart(mode, q) {
+    var err = AndroidAi.start(mode, q || '');
+    if (err) toast(err, 5000);
+    else if (mode !== 'chat') toast('🤖 بدأ الفحص في الخلفية — تابع استعمال التطبيق، ويصلك إشعار عند انتهائه', 6000);
+  }
+
+  /* مربع الحوار: آخر تبادل أعلى القائمة (سؤالك ثم ردّه) حتى لا يُحتاج تمرير بالريموت */
+  function renderChat(keepFocus) {
+    aiChatOpen = true;
     show('screen-ai');
+    $('ai-title').textContent = '💬 محادثة مع المساعد';
     var st = aiState(), box = $('ai-list');
     box.innerHTML = '';
     var els = [], actions = [];
@@ -3063,24 +3074,66 @@
       var el = makeItem(html, cls);
       box.appendChild(el); els.push(el); actions.push(fn || function () {});
     }
-    function start(mode, q) {
-      var err = AndroidAi.start(mode, q || '');
-      if (err) toast(err, 5000);
-      else toast('🤖 بدأ الفحص في الخلفية — تابع استعمال التطبيق، ويصلك إشعار عند انتهائه', 6000);
-      renderAi();
+    if (st.running) {
+      add('⏳ المساعد يكتب ردّه… <span class="sub">' + esc(st.step || '') + ' — يمكنك مغادرة الشاشة والعودة</span>');
+    } else {
+      add('✍️ اكتب رسالة', function () {
+        promptInput(null, '', 'اكتب رسالتك للمساعد…', function (v) {
+          if (v) aiStart('chat', v);
+          renderChat();
+        });
+      });
     }
+    var chat = st.chat || [];
+    if (chat.length && !st.running) {
+      add('🆕 محادثة جديدة <span class="sub">تمسح هذه الرسائل</span>',
+        function () { AndroidAi.clearChat(); renderChat(); });
+    }
+    if (!chat.length) add('اكتب ما تريد: مشكلة تراها، سؤالاً عن التطبيق، أو طلب تغيير إعداد (مثل: أطفئ نافذة HDMI).', null, 'ai-line ai-q');
+    // مجموعات: رسالة المستخدم وما تلاها من ردّ، الأحدث أولاً
+    var groups = [];
+    chat.forEach(function (t) {
+      if (t.role === 'user' || !groups.length) groups.push([]);
+      groups[groups.length - 1].push(t);
+    });
+    groups.reverse().forEach(function (g) {
+      g.forEach(function (t) {
+        if (t.role === 'user') { add('🧑 ' + esc(t.text), null, 'ai-line ai-me'); return; }
+        String(t.error ? '⚠️ ' + t.error : t.text).split('\n').forEach(function (ln, i) {
+          if (ln.trim()) add((i === 0 ? '🤖 ' : '') + esc(ln), null, 'ai-line');
+        });
+        (t.actions || []).forEach(function (a) {
+          add('🔧 طبّق المساعد: ' + esc(aiFixName(a.action)) + ' <span class="sub">' + esc(a.result || '') + '</span>', null, 'ai-line');
+        });
+      });
+    });
+    var keep = focus.idx;
+    setFocusList(els, function (idx) { actions[idx](); });
+    if (keepFocus && keep < els.length) { focus.idx = keep; paintFocus(); }
+  }
+
+  function renderAi(keepFocus) {
+    aiChatOpen = false;
+    show('screen-ai');
+    $('ai-title').textContent = '🤖 المساعد الذكي';
+    var st = aiState(), box = $('ai-list');
+    box.innerHTML = '';
+    var els = [], actions = [];
+    function add(html, fn, cls) {
+      var el = makeItem(html, cls);
+      box.appendChild(el); els.push(el); actions.push(fn || function () {});
+    }
+    function start(mode, q) { aiStart(mode, q); renderAi(); }
+    function openChat() { screenStack.push(renderAi); renderChat(); }
     if (!st.hasKey) {
       add('⚠️ هذه النسخة بُنيت بلا مفتاح الذكاء الاصطناعي <span class="sub">المساعد لا يعمل فيها</span>');
     } else if (st.running) {
       add('⏳ المساعد يعمل الآن في الخلفية <span class="sub">' + esc(st.step || '') + ' — يمكنك مغادرة هذه الشاشة</span>');
+      add('💬 محادثة مع المساعد', openChat);
     } else {
+      add('💬 محادثة مع المساعد <span class="sub">اكتب له ما تريد ويردّ عليك، ويذكر ما سبق من الحوار</span>', openChat);
       add('🔍 افحص التطبيق الآن <span class="sub">يدرس السجلّ والشبكة والاشتراك ويكتب تقريراً</span>',
         function () { start('check'); });
-      add('💬 اسأل المساعد أو صِف المشكلة', function () {
-        promptInput(null, '', 'اكتب سؤالك أو صِف ما حدث…', function (v) {
-          if (v) start('ask', v); else renderAi();
-        });
-      });
     }
     add('🔁 الفحص التلقائي عند الأخطاء: <span class="sub">' +
       (st.auto ? 'مفعّل (4 مرات في اليوم على الأكثر)' : 'متوقف') + '</span>',
@@ -3121,14 +3174,17 @@
   window.__onAiState = function () {
     var st = aiState();
     var onAi = !$('screen-ai').classList.contains('hidden');
-    if (aiWasRunning && !st.running) {
+    var lastChat = (st.chat || [])[(st.chat || []).length - 1];
+    if (aiWasRunning && !st.running && lastChat && lastChat.role === 'ai' && Date.now() - lastChat.t < 5000) {
+      if (!(onAi && aiChatOpen)) toast(lastChat.error ? '🤖 تعذّر الرد: ' + lastChat.error : '🤖 ردّ المساعد على رسالتك — افتح المحادثة', 7000);
+    } else if (aiWasRunning && !st.running) {
       var last = (st.history || [])[0] || {};
       toast(last.error ? '🤖 تعذّر الفحص: ' + last.error
         : '🤖 انتهى المساعد' + ((last.actions || []).length ? ' وطبّق ' + last.actions.length + ' إصلاحاً' : '') +
           (onAi ? '' : ' — التقرير في «المساعد الذكي»'), 7000);
     }
     aiWasRunning = !!st.running;
-    if (onAi && !kb.open) renderAi(true);
+    if (onAi && !kb.open) { if (aiChatOpen) renderChat(true); else renderAi(true); }
     else if (!$('screen-home').classList.contains('hidden') && !confirmDialog.open && !st.running) homeScreen();
   };
 
