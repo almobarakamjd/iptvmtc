@@ -1,15 +1,15 @@
 {
   "mytv": {
-    "versionCode": 27,
-    "versionName": "1.7.11",
+    "versionCode": 28,
+    "versionName": "1.7.12",
     "url": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/SmartTVPlus.apk",
-    "notes": "نافذة HDMI: عودة تلقائية للتطبيق إن حوّل التلفاز الشاشة إلى المدخل، وإصلاح تكبيرها عند العودة من المشغّل.",
+    "notes": "المساعد الذكي: فحص الأخطاء ومحادثة بالكتابة أو بالصوت وتحكم بالتلفاز. وتشغيل النافذة الصغيرة وإطفاؤها من المشغّل.",
     "mobileUrl": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/myTvMobile.apk"
   },
   "player": {
-    "versionCode": 13,
-    "versionName": "1.5.5",
+    "versionCode": 14,
+    "versionName": "1.5.6",
     "url": "https://github.com/almobarakamjd/iptvmtc/releases/download/v1.0.0/PlayerPlus.apk",
-    "notes": "رسالة أوضح عند تعذّر التحكم بالنافذة الصغيرة."
+    "notes": "تشغيل النافذة الصغيرة وإطفاؤها من القائمة، ومحاولة تشغيل الفيديو والنافذة تعمل."
   }
 }
